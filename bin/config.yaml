@@ -1,0 +1,16 @@
+# path or URL to sample sheet (TSV format, columns: sample, condition, ...)
+ref:
+  # path/to/bowtie2 index
+  index:        /varidata/research/projects/bbc/versioned_references/latest/data/hg38_gencode/indexes/bowtie2/hg38_gencode
+  fai:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa.fai
+
+modules:
+  cutadapt: bbc2/cutadapt/cutadapt-4.3
+  bowtie2:  bbc2/bowtie2/bowtie2-2.5.1
+  samtools: bbc2/samtools/samtools-1.20
+  bedtools: bbc2/bedtools/bedtools-2.30.0
+  ucsc: bbc2/kent-core/kent-core-v448 
+  fastqc: bbc2/fastqc/fastqc-0.12.1
+  fastq_screen: bbc2/fastq_screen/fastq_screen-0.14.0
+  samblaster: bbc2/samblaster/samblaster-0.1.26
+  htslib: bbc2/htslib/htslib-1.20

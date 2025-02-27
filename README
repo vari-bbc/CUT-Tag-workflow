@@ -1,0 +1,27 @@
+# Workflow for Derek 
+Author: Daisy Fu (daisy.fu@vai.org; fuzhen327@gmail.com)
+
+This workflow is designed to trim, align, and convert bam files bw files for easy visualization. The workflow was based on the code that Derek shared, and Daisy converted them to a Snakemake workflow.
+
+# Usage
+1. Put the 'fastq.gz' files in the `raw_data/` subdirectory. You may use symlinks
+
+2. Look over the config file under bin/, make sure the references are correct. Do not change modules.  
+
+3. Set up the sample sheet (samples.tsv). You may find it helpful to run `./make_samples_template.sh` from inside the `bin/` subdirectory to get a template file based on the files in `raw_data/`. The columns are:
+
+   i.`sample` -- Name of the sample. Fastqs will be renamed to this.
+   
+   ii. `control` -- Since this was modified from BBC's Peaks workflow, the control is not applicable here, you can  use 'NA'. Leaving it blank should also be fine.
+   
+   iii. `fq1` -- R1 file name in raw_data. 
+    
+    iv. `fq2` -- R2 file name in raw_data.
+
+   v. `sample_group` -- Since this was modified from BBC's Peaks workflow, the control is not applicable here, you can use the same information as sample column. 
+ 
+   vi. if you used make_samples_template.sh, you need to rename the generated template file to "samples.tsv". 
+
+
+4. From the root directory of the project (where Snakefile is located), run `sbatch bin/run_snakemake.sh`.
+

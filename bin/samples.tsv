@@ -1,0 +1,3 @@
+sample	control	fq1	fq2	sample_group	enriched_factor
+sample1_treatment2_rep1	NA	sample1_test_L000_R1_001.fastq.gz	sample1_test_L000_R2_001.fastq.gz	sample1	
+sample2_treatment2_rep2	NA	sample2_test_L000_R1_001.fastq.gz	sample2_test_L000_R2_001.fastq.gz	sample2	

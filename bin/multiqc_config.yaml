@@ -1,0 +1,43 @@
+top_modules:
+    - fastqc:
+        name: 'FastQC (raw)'
+        path_filters:
+            - '*/fastqc/*_fastqc.zip'
+    - fastqc:
+        name: 'FastQC (trimmed)'
+        info: 'This section of the report shows FastQC results after adapter trimming.'
+        target: ''
+        path_filters:
+            - '*/trim_galore/*_fastqc.zip'
+    - cutadapt
+    - samtools:
+        name: 'Samtools (pre-filtering)'
+        path_filters:
+            - '*/bwamem/*'
+    - samtools:
+        name: 'Samtools (post-filtering)'
+        info: 'Samtools after removing ChrM and retaining only mapped, primary, properly paired alignments.'
+        target: ''
+        path_filters:
+            - '*/filt_bams/*'
+    - samtools:
+        name: 'Samtools (post-filtering and deduped)'
+        info: 'Samtools after removing ChrM and retaining only mapped, primary, properly paired alignments and deduped.'
+        target: ''
+        path_filters:
+            - '*/dedup_bams/*'
+    - picard:
+        name: 'Picard (pre-filtering)'
+        info: 'Picard metrics; Recall that Picard removes duplicates by default for insert size distribution.'
+        path_filters:
+            - '*/bwamem/*'
+    - picard:
+        name: 'Picard (post-filtering)'
+        info: 'Picard metrics after removing ChrM and retaining only mapped, primary, properly paired alignments. Recall that Picard removes duplicates by default for insert size distribution.'
+        target: ''
+        path_filters:
+            - '*/filt_bams/*'
+extra_fn_clean_trim:
+     - "_filt_alns"
+     - "_val_1"
+     - "_val_2"
