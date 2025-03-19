@@ -1,0 +1,7 @@
+raw_data
+.snakemake/
+analysis/
+benchmarks/
+logs/
+peaks_workflow.e
+peaks_workflow.o
