@@ -3,6 +3,14 @@ ref:
   # path/to/bowtie2 index
   index:        /varidata/research/projects/bbc/versioned_references/latest/data/hg38_gencode/indexes/bowtie2/hg38_gencode
   fai:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa.fai
+  sequence:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa
+
+# remove putative PCR duplicates from BAMs
+dedup: False
+
+macs3:
+  species: "hs"
+  run_broad: False # set to True to run macs3 in broad mode also.
 
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
@@ -14,3 +22,7 @@ modules:
   fastq_screen: bbc2/fastq_screen/fastq_screen-0.14.0
   samblaster: bbc2/samblaster/samblaster-0.1.26
   htslib: bbc2/htslib/htslib-1.20
+  trim_galore: bbc2/trim_galore/trim_galore-0.6.10
+  macs3: bbc2/macs3/macs3-3.0.3
+  picard: bbc2/picard/picard-3.0.0
+  multiqc: bbc2/multiqc/multiqc-1.14

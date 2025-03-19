@@ -32,11 +32,11 @@ if not os.path.exists(tmp_dir):
 
 rule all:
     input:
-        #expand("analysis/bwamem/{sample.sample}.bam", sample=samples.itertuples()),
-        #expand("analysis/filt_bams/{sample.sample}_filt_alns.bam", sample=samples.itertuples()),
-        #expand("analysis/bowtie2/{sample.sample}.sorted.bam", sample=samples.itertuples()),
-        #expand("analysis/bed_files/{sample.sample}.bed.gz", sample=samples.itertuples())
-        expand("analysis/bigwig_files/{sample.sample}.bw", sample=samples.itertuples())
+        "analysis/multiqc/multiqc_report.html",
+        expand("analysis/bigwig_files/{sample.sample}.bw", sample=samples.itertuples()),
+        expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
+        expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else '',
+
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
             fastq = expand("raw_data/{fq}", fq = units[units["sample"] == wildcards.sample]["fq1"].values)
@@ -97,42 +97,45 @@ rule fastqc:
         fastqc --outdir {params.outdir} {input}
         """
 
-rule cutadapt:
+rule trim_galore_PE:
+    """
+    Run trim_galore on paired-end reads.
+    """
     input:
-       # expand("analysis/renamed_data/{{sample}}_R{read}.fastq.gz", read=["1","2"])
-        R1="analysis/renamed_data/{sample}_R1.fastq.gz",
-        R2="analysis/renamed_data/{sample}_R2.fastq.gz"
+        expand("analysis/renamed_data/{{sample}}_R{read}.fastq.gz", read=["1","2"])
     output:
-        R1_trimmed="analysis/trim_fq/{sample}_R1_trimmed.fq.gz",
-        R2_trimmed="analysis/trim_fq/{sample}_R2_trimmed.fq.gz"
+        temp(expand("analysis/trim_galore/{{sample}}_R{ext}", ext=["1_val_1.fq.gz","2_val_2.fq.gz"])),
+        expand("analysis/trim_galore/{{sample}}_R1{ext}", ext=[".fastq.gz_trimming_report.txt","_val_1_fastqc.html"]),
+        expand("analysis/trim_galore/{{sample}}_R2{ext}", ext=[".fastq.gz_trimming_report.txt","_val_2_fastqc.html"]),
+    params:
     benchmark:
-        "benchmarks/trim_fq/{sample}.txt"
+        "benchmarks/trim_galore/{sample}.txt"
     envmodules:
-        config['modules']['cutadapt']
+        config['modules']['trim_galore']
     threads: 4
     resources:
         mem_gb = 64,
         log_prefix=lambda wildcards: "_".join(wildcards)
     shell:
         """
-        cutadapt -j 8 -m 20 -a CTGTCTCTTATACACATCT -A CTGTCTCTTATACACATCT -o {output.R1_trimmed} -p {output.R2_trimmed} {input.R1} {input.R2}
+        trim_galore --paired {input} --output_dir analysis/trim_galore/ --cores {threads} --fastqc
         """
+
 
 rule bowtie2:
     input:
-        R1_trimmed="analysis/trim_fq/{sample}_R1_trimmed.fq.gz",
-        R2_trimmed="analysis/trim_fq/{sample}_R2_trimmed.fq.gz"   
+        R1_trimmed="analysis/trim_galore/{sample}_R1_val_1.fq.gz",
+        R2_trimmed="analysis/trim_galore/{sample}_R2_val_2.fq.gz"   
     output:
-        #sam="analysis/bowtie2/{sample}.sam",
         sorted_bam="analysis/bowtie2/{sample}.sorted.bam",
-        unsorted_bam="analysis/bowtie2/{sample}.bam",
+        unsorted_bam=temp("analysis/bowtie2/{sample}.bam"),
         outbai="analysis/bowtie2/{sample}.sorted.bam.bai",
-        idxstat="analysis/bowtie2/{sample}.bam.idxstat"
     benchmark:
         "benchmarks/bowtie2/{sample}.txt"
     params:
         bt2_index=bt2_index,
-        samblaster_params=lambda wildcards: "--addMateTags" if samples[samples['sample']==wildcards.sample]['se_or_pe'].values=="PE" else "--ignoreUnmated"
+        samblaster_params=lambda wildcards: "--addMateTags" if samples[samples['sample']==wildcards.sample]['se_or_pe'].values=="PE" else "--ignoreUnmated",
+        dedup_params="--removeDups" if config['dedup'] else "",
     threads: 16
     envmodules:
         config['modules']['bowtie2'],
@@ -144,7 +147,9 @@ rule bowtie2:
     shell:
         """
         bowtie2 -p 16 --very-sensitive-local --soft-clipped-unmapped-tlen --no-mixed --no-discordant --dovetail --phred33 \
-        -I 10 -X 1000 -x {params.bt2_index} -1 {input.R1_trimmed} -2 {input.R2_trimmed} | samtools view -bS \
+        -I 10 -X 1000 -x {params.bt2_index} -1 {input.R1_trimmed} -2 {input.R2_trimmed} | \
+        samblaster {params.dedup_params} | \
+        samtools view -bS \
         -@ {threads} \
         -O "BAM" \
         -o {output.unsorted_bam} 
@@ -154,16 +159,107 @@ rule bowtie2:
         echo "END indexing"
         echo "END indexing" 1>&2
 
-        samtools idxstats {output.sorted_bam} > {output.idxstat}
-        echo "END idxstats"
-        echo "END idxstats" 1>&2
         """
+
+
+rule idxstats:
+    """
+    Run samtools idxstats.
+    """
+    input:
+        "analysis/{align_dirname}/{bam_name}.sorted.bam"
+    output:
+        "analysis/{align_dirname}/idxstats/{bam_name}.idxstats"
+    params:
+    benchmark:
+        "benchmarks/{align_dirname}/idxstats/{bam_name}.txt"
+    envmodules:
+        config['modules']['samtools']
+    threads: 8
+    resources:
+        mem_gb = 32,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        samtools idxstats -@ {threads} {input} > {output}
+        """
+
+rule flagstat:
+    """
+    Run samtools flagstat.
+    """
+    input:
+        "analysis/{align_dirname}/{bam_name}.sorted.bam"
+    output:
+        "analysis/{align_dirname}/flagstat/{bam_name}.flagstat"
+    params:
+    benchmark:
+        "benchmarks/{align_dirname}/flagstat/{bam_name}.txt"
+    envmodules:
+        config['modules']['samtools']
+    threads: 8
+    resources:
+        mem_gb = 32,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        samtools flagstat -@ {threads} {input} > {output}
+        """
+
+rule CollectAlignmentSummaryMetrics:
+    """
+    Run Picard CollectAlignmentSummaryMetrics.
+    """
+    input:
+        "analysis/{align_dirname}/{bam_name}.sorted.bam"
+    output:
+        out="analysis/{align_dirname}/CollectAlignmentSummaryMetrics/{bam_name}.aln_metrics.txt",
+    params:
+        temp="./analysis/{align_dirname}/CollectAlignmentSummaryMetrics/",
+        reffasta=config["ref"]["sequence"]
+    benchmark:
+        "benchmarks/{align_dirname}/CollectAlignmentSummaryMetrics/{bam_name}.txt"
+    envmodules:
+        config['modules']['picard']
+    threads: 4
+    resources:
+        mem_gb = 64,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        java -Xms8g -Xmx{resources.mem_gb}g -Djava.io.tmpdir={params.temp} -jar $PICARD CollectAlignmentSummaryMetrics I={input} O={output.out} R={params.reffasta}
+        """
+
+rule CollectInsertSizeMetrics:
+    """
+    Run Picard CollectInsertSizeMetrics.
+    """
+    input:
+        "analysis/{align_dirname}/{bam_name}.sorted.bam"
+    output:
+        out="analysis/{align_dirname}/CollectInsertSizeMetrics/{bam_name}.insert_size_metrics.txt",
+        hist="analysis/{align_dirname}/CollectInsertSizeMetrics/{bam_name}.insert_size_histogram.pdf"
+    params:
+        temp="./analysis/{align_dirname}/CollectInsertSizeMetrics/"
+    benchmark:
+        "benchmarks/{align_dirname}/CollectInsertSizeMetrics/{bam_name}.txt"
+    envmodules:
+        config['modules']['picard']
+    threads: 4
+    resources:
+        mem_gb = 64,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        java -Xms8g -Xmx{resources.mem_gb}g -Djava.io.tmpdir={params.temp} -jar $PICARD CollectInsertSizeMetrics I={input} O={output.out} H={output.hist}
+        """
+
 
 rule convert_bam:
     input:
         bam="analysis/bowtie2/{sample}.bam"
     output:
-        sorted_bed="analysis/bed_files/{sample}.bed",
+        sorted_bed=temp("analysis/bed_files/{sample}.bed"),
         gzip_bed="analysis/bed_files/{sample}.bed.gz"
     benchmark:
         "benchmarks/bed_files/{sample}.txt"
@@ -189,7 +285,7 @@ rule generate_bw:
         gzip_bed="analysis/bed_files/{sample}.bed.gz"
     output:
         bw_file="analysis/bigwig_files/{sample}.bw",
-        bedgraph="analysis/bigwig_files/{sample}.bedgraph"
+        bedgraph=temp("analysis/bigwig_files/{sample}.bedgraph")
     benchmark:
         "benchmarks/bigwig_files/{sample}.txt"
     envmodules:
@@ -214,5 +310,129 @@ rule generate_bw:
 
         bedGraphToBigWig {output.bedgraph} {params.chr_len} {output.bw_file}
         echo "BigWig file created: {output.bw_file}"
+
+        """
+
+
+def get_macs3_bams(wildcards):
+    macs3_bams = { 'trt': "analysis/bowtie2/{sample}.sorted.bam".format(sample=wildcards.sample) }
+    
+    control = samples[samples['sample'] == wildcards.sample]['control'].values[0]
+    
+    if (not pd.isnull(control)):
+        macs3_bams['control'] = expand("analysis/bowtie2/{sample}.sorted.bam", sample = control.split(','))
+    
+    return macs3_bams
+
+
+rule macs3_narrow:
+    shadow: "shallow" # macs3 makes a tmp_b_c.txt file in the working directory; not sure how that is handled when multiple instances of macs3 are run simultaneously. To be safe, will run using a shadow rule so that each instance can create its own tmp_b_c.txt
+    input:
+        unpack(get_macs3_bams)
+    output:
+        multiext("analysis/macs3_narrow/{sample}_peaks", ".xls", ".narrowPeak"),
+        "analysis/macs3_narrow/{sample}_summits.bed",
+    benchmark:
+        "benchmarks/macs3_narrow/{sample}.txt"
+    params:
+        control_param=lambda wildcards, input: "-c " + ' '.join(input.control) if 'control' in input.keys() else '',
+        #peak_type_param=lambda wildcards: "--broad" if wildcards.peak_type == "broad" else "",
+        species=config['macs3']['species'],
+        q_cutoff="0.01",
+        name="{sample}",
+        outdir="analysis/macs3_narrow/",
+        tmpdir=tmp_dir,
+    envmodules:
+        config['modules']['macs3']
+    threads: 1
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+
+        macs3 callpeak \
+        -t {input.trt} \
+        {params.control_param} \
+        -f BAMPE \
+        -g {params.species} \
+        -n {params.name} \
+        -q {params.q_cutoff} \
+        --keep-dup all \
+        --outdir {params.outdir} \
+        --tempdir {params.tmpdir}
+
+        """
+
+rule macs3_broad:
+    shadow: "shallow" # macs3 makes a tmp_b_c.txt file in the working directory; not sure how that is handled when multiple instances of macs3 are run simultaneously. To be safe, will run using a shadow rule so that each instance can create its own tmp_b_c.txt
+    input:
+        unpack(get_macs3_bams)
+    output:
+        multiext("analysis/macs3_broad/{sample}_peaks", ".xls", ".broadPeak", ".gappedPeak"),
+    benchmark:
+        "benchmarks/macs3_broad/{sample}.txt"
+    params:
+        control_param=lambda wildcards, input: "-c " + ' '.join(input.control) if 'control' in input.keys() else '',
+        #peak_type_param=lambda wildcards: "--broad" if wildcards.peak_type == "broad" else "",
+        species=config['macs3']['species'],
+        q_cutoff="0.01",
+        name="{sample}",
+        outdir="analysis/macs3_broad/",
+        tmpdir=tmp_dir,
+    envmodules:
+        config['modules']['macs3']
+    threads: 1
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+
+        macs3 callpeak \
+        --broad \
+        -t {input.trt} \
+        {params.control_param} \
+        -f BAMPE \
+        -g {params.species} \
+        -n {params.name} \
+        -q {params.q_cutoff} \
+        --keep-dup all \
+        --outdir {params.outdir} \
+        --tempdir {params.tmpdir}
+
+        """
+
+rule multiqc:
+    input:
+        expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()),
+        expand("analysis/fastqc/{sample.sample}_R2_fastqc.html", sample=samples.itertuples()),
+        expand("analysis/trim_galore/{sample.sample}_R{read}_val_{read}_fastqc.html", sample=samples.itertuples(), read=["1","2"]),
+        expand("analysis/bowtie2/idxstats/{sample.sample}.idxstats", sample=samples.itertuples()),
+        expand("analysis/bowtie2/flagstat/{sample.sample}.flagstat", sample=samples.itertuples()),
+        expand("analysis/bowtie2/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples()),
+        expand("analysis/bowtie2/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples()),
+        expand("analysis/macs3_narrow/{sample.sample}_peaks.xls", sample=samples.itertuples()),
+    output:
+        "analysis/multiqc/multiqc_report.html",
+    benchmark:
+        "benchmarks/multiqc/multiqc.txt"
+    params:
+        workdir="analysis/multiqc/",
+        dirs=lambda wildcards,input: " ".join(pd.unique([os.path.dirname(x) for x in input])),
+        outfile="multiqc_report"
+    envmodules:
+        config['modules']['multiqc']
+    threads: 4
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    shell:
+        """
+        multiqc \
+        --force \
+        --outdir {params.workdir} \
+        --filename {params.outfile} \
+        {params.dirs}
 
         """
