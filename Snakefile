@@ -22,6 +22,12 @@ samples = units[["sample","control","sample_group","enriched_factor","se_or_pe"]
 if not samples['sample'].is_unique:
     raise Exception('A sample has more than one combination of control, sample_group, enriched_factor, and/or se_or_pe.')
 
+# Filter for sample rows that are not controls
+controls_list = list(itertools.chain.from_iterable( [x.split(',') for x in samples['control'].values if not pd.isnull(x)] ))
+samples_no_controls = samples[-samples['sample'].isin(controls_list)].copy()
+samples_no_controls["enriched_factor"] = samples_no_controls["enriched_factor"].fillna("peaks")
+sample_groups = pd.unique(samples_no_controls['sample_group']).tolist()
+
 snakemake_dir = os.getcwd() + "/"
 
 # make a tmp directory for analyses
@@ -29,13 +35,16 @@ tmp_dir = os.path.join(snakemake_dir, "tmp")
 if not os.path.exists(tmp_dir):
     os.mkdir(tmp_dir)
 
+peak_types = ['macs3_narrow']
+peak_types = peak_types + ["macs3_broad"] if config['macs3']['run_broad'] else peak_types
 
 rule all:
     input:
         "analysis/multiqc/multiqc_report.html",
         expand("analysis/bigwig_files/{sample.sample}.bw", sample=samples.itertuples()),
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
-        expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else '',
+        expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
+        expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -401,6 +410,45 @@ rule macs3_broad:
         --outdir {params.outdir} \
         --tempdir {params.tmpdir}
 
+        """
+
+def get_beds_for_merging (wildcards):
+    curr_samples = []
+    if (wildcards.merge_id in samples_no_controls.sample_group.values):
+        curr_samples = samples_no_controls[samples_no_controls['sample_group'] == wildcards.merge_id]['sample'].values
+    elif (wildcards.merge_id == "all"):
+        curr_samples = samples_no_controls['sample'].values
+    else:
+        raise Exception("Invalid merge_id for peak merging.")
+
+    in_beds = []
+    if (wildcards.peak_type == "macs3_narrow"):
+        in_beds = expand("analysis/macs3_narrow/{sample}_peaks.narrowPeak", sample = curr_samples)
+    elif (wildcards.peak_type == "macs3_broad"):
+        in_beds = expand("analysis/macs3_broad/{sample}_peaks.broadPeak", sample = curr_samples)
+    else:
+        raise Exception("Invalid peak_type for peak merging.")
+    
+    return in_beds
+
+rule merge_peaks:
+    input:
+        get_beds_for_merging
+    output:
+        "analysis/{peak_type}/merged/{merge_id}.bed"
+    benchmark:
+        "benchmarks/{peak_type}/merged/{merge_id}.txt"
+    params:
+    envmodules:
+        config['modules']['bedtools']
+    threads: 1
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+
+        cat {input} | sort -k 1,1 -k2,2n | bedtools merge > {output}
         """
 
 rule multiqc:
