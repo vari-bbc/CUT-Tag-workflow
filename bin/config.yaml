@@ -10,7 +10,10 @@ dedup: False
 
 macs3:
   species: "hs"
-  run_broad: False # set to True to run macs3 in broad mode also.
+  run_broad: True #False # set to True to run macs3 in broad mode also.
+
+frip:
+  peak_type: "macs3_narrow"
 
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
@@ -25,4 +28,5 @@ modules:
   trim_galore: bbc2/trim_galore/trim_galore-0.6.10
   macs3: bbc2/macs3/macs3-3.0.3
   picard: bbc2/picard/picard-3.0.0
-  multiqc: bbc2/multiqc/multiqc-1.14
+  multiqc: bbc2/multiqc/multiqc-1.28
+  R: bbc2/R/alt/R-4.4.2-setR_LIBS_USER-extra

@@ -9,7 +9,8 @@ min_version("7.25.0")
 
 ##### Editable variables #####
 
-configfile: "bin/config.yaml"
+configfile_path = "bin/config.yaml"
+configfile: configfile_path
 
 bt2_index = config['ref']['index']
 
@@ -265,6 +266,9 @@ rule CollectInsertSizeMetrics:
 
 
 rule convert_bam:
+    """
+    Assumes non-discordant alignments as it outputs a BED file that represents the alignment of the fragment not the individual reads.
+    """
     input:
         bam="analysis/bowtie2/{sample}.bam"
     output:
@@ -451,6 +455,55 @@ rule merge_peaks:
         cat {input} | sort -k 1,1 -k2,2n | bedtools merge > {output}
         """
 
+rule frags_over_peaks:
+    input:
+        frags = "analysis/bed_files/{sample}.bed.gz",
+        peaks = "analysis/{peak_type}/merged/{merge_id}.bed"
+    output:
+        bed = "analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.bed",
+        frag_count = "analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt"
+    benchmark:
+        "benchmarks/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt"
+    params:
+    envmodules:
+        config['modules']['bedtools']
+    threads: 1
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        tot_frags=`zcat {input.frags} | wc -l`
+        overlap_frags=`bedtools intersect -u -a {input.frags} -b {input.peaks} | tee {output.bed} | wc -l`
+        frip=`echo "scale=5;$overlap_frags / $tot_frags" | bc`
+
+        printf "$tot_frags\\n$overlap_frags\\n$frip\\n" > {output.frag_count}
+        """
+
+def get_frag_count_files (wildcards):
+    out_files=expand("analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt", peak_type = config['frip']['peak_type'], merge_id = samples_no_controls['sample_group'].tolist() + ['all'], sample = samples_no_controls['sample'])
+    return out_files
+
+rule frip:
+    input:
+        frag_counts=get_frag_count_files,
+        samplesheet=samplesheet
+    output:
+        all_merge="analysis/frags_over_peaks/all_frip.csv",
+        group_merge="analysis/frags_over_peaks/group_frip.csv"
+    benchmark:
+        "benchmarks/frags_over_peaks/frip.txt"
+    params:
+        peak_type=config['frip']['peak_type']
+    envmodules:
+        config['modules']['R']
+    threads: 1
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    script:
+        "bin/scripts/calc_frip.R"
+
 rule multiqc:
     input:
         expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()),
@@ -461,11 +514,14 @@ rule multiqc:
         expand("analysis/bowtie2/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples()),
         expand("analysis/bowtie2/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples()),
         expand("analysis/macs3_narrow/{sample.sample}_peaks.xls", sample=samples.itertuples()),
+        expand("analysis/frags_over_peaks/{peak_type}_frip.csv", peak_type = ['all','group'])
     output:
-        "analysis/multiqc/multiqc_report.html",
+        mqc_vers="analysis/multiqc/all_mqc_versions.yaml",
+        mqc="analysis/multiqc/multiqc_report.html",
     benchmark:
         "benchmarks/multiqc/multiqc.txt"
     params:
+        config_file=configfile_path,
         workdir="analysis/multiqc/",
         dirs=lambda wildcards,input: " ".join(pd.unique([os.path.dirname(x) for x in input])),
         outfile="multiqc_report"
@@ -477,10 +533,13 @@ rule multiqc:
         log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
     shell:
         """
+        grep -P -A999 "^modules:"  {params.config_file} | tail -n+2 | perl -npe 's:bbc2/[^/]+/[^\-]+\-::'  > {output.mqc_vers}
+
         multiqc \
         --force \
+        --config bin/multiqc_config2.yaml \
         --outdir {params.workdir} \
         --filename {params.outfile} \
-        {params.dirs}
+        {params.dirs} analysis/multiqc/all_mqc_versions.yaml
 
         """
