@@ -42,7 +42,7 @@ peak_types = peak_types + ["macs3_broad"] if config['macs3']['run_broad'] else p
 rule all:
     input:
         "analysis/multiqc/multiqc_report.html",
-        expand("analysis/bigwig_files/{sample.sample}.bw", sample=samples.itertuples()),
+        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples.itertuples(), norm_method = ['baseCov']),
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
         expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
@@ -293,14 +293,46 @@ rule convert_bam:
         bgzip -c {output.sorted_bed} > {output.gzip_bed}
         """
 
-rule generate_bw:
+rule base_cov_scale_factors:
+    """
+    Generate scaling factor for generate_bw rule to normalize by total base coverage.
+    """
     input:
         gzip_bed="analysis/bed_files/{sample}.bed.gz"
     output:
-        bw_file="analysis/bigwig_files/{sample}.bw",
-        bedgraph=temp("analysis/bigwig_files/{sample}.bedgraph")
+        "analysis/bigwig_norm_factors/base_cov_scale_factors/{sample}.tsv"
     benchmark:
-        "benchmarks/bigwig_files/{sample}.txt"
+        "benchmarks/bigwig_norm_factors/base_cov_scale_factors/{sample}.txt"
+    params:
+    threads: 4
+    resources:
+        mem_gb=72,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    envmodules:
+    shell:
+        """
+        coverage=$(zcat {input.gzip_bed} | awk '{{s+=($3-$2)}} END {{print s}}')
+        echo "Coverage: $coverage"
+
+        scaling_factor=$(awk -v c="$coverage" 'BEGIN {{print (1/c)*10^10}}')
+        echo "Scaling Factor: $scaling_factor"
+
+        echo "$scaling_factor" > {output}
+        """
+
+def get_scale_factor_file (wildcards):
+    if (wildcards.scale_method == "baseCov"):
+        return "analysis/bigwig_norm_factors/base_cov_scale_factors/{sample}.tsv".format(sample=wildcards.sample)
+
+rule generate_bw:
+    input:
+        gzip_bed="analysis/bed_files/{sample}.bed.gz",
+        scale_factor=get_scale_factor_file
+    output:
+        bw_file="analysis/bigwig_files/{scale_method}/{sample}.bw",
+        bedgraph=temp("analysis/bigwig_files/{scale_method}/{sample}.bedgraph")
+    benchmark:
+        "benchmarks/bigwig_files/{scale_method}/{sample}.txt"
     envmodules:
         config['modules']['bedtools'],
         config['modules']['ucsc']
@@ -312,10 +344,7 @@ rule generate_bw:
         log_prefix=lambda wildcards: "_".join(wildcards)
     shell:
         """
-        coverage=$(zcat {input.gzip_bed} | awk '{{s+=($3-$2)}} END {{print s}}')
-        echo "Coverage: $coverage"
-
-        scaling_factor=$(awk -v c="$coverage" 'BEGIN {{print (1/c)*10^10}}')
+        scaling_factor=$(head -n1 {input.scale_factor})
         echo "Scaling Factor: $scaling_factor"
 
         zcat {input.gzip_bed} | bedtools genomecov -bg -i stdin -g {params.chr_len} -scale $scaling_factor > {output.bedgraph}
