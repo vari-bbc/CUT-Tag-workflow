@@ -1,3 +1,5 @@
+options(warn=1) # show all warnings
+
 ##########################################
 ### Variables set by snakemake pipeline###
 ##########################################
@@ -105,17 +107,20 @@ saveRDS(small_wins, small_wins_rds) # for faster debugging
 filter_wins <- filterWindowsGlobal(small_wins, binned)
 saveRDS(filter_wins, global_filt_rds)
 
-pdf(file.path(figs_dir, "filter_th.pdf"), width=6, height=5)
-hist(filter_wins$filter, main="", breaks=50,
-    xlab="Log-fold change from global background")
-abline(v=hi_abund_th, col="red")
-dev.off()
-
 keep <- filter_wins$filter > hi_abund_th # filter for greater than log2('win_filter_fold') fold difference compared to background
 
 keep_num <- sum(keep)
 tot_wins <- length(keep)
-message("For TMM on high abundance normalization, ", keep_num, " out of ", tot_wins, " (", round(keep_num/tot_wins, 2), ")", " windows were kept.")
+hi_abund_msg <- paste0(keep_num, " out of ", tot_wins, " (", round(keep_num/tot_wins, 2), ")")
+
+pdf(file.path(figs_dir, "filter_th.pdf"), width=6, height=5)
+hist(filter_wins$filter, main=paste0(hi_abund_msg, " windows > cutoff"), breaks=50,
+    xlab="Log-fold change from global background")
+abline(v=hi_abund_th, col="red")
+dev.off()
+
+message("For TMM on high abundance normalization, ", hi_abund_msg, " windows were kept.")
+
 filtered.wins <- small_wins[keep, ]
 
 filtered.wins <- normFactors(filtered.wins, se.out=TRUE) 
@@ -123,3 +128,6 @@ saveRDS(filtered.wins, filt_small_wins_rds)
 
 calc_and_write_final_norm_facs(se=filtered.wins, outfile=outEffNorm)
 system(str_glue("ln -sr {outEffNorm} {outEffNormLink}"))
+
+
+sessionInfo()
