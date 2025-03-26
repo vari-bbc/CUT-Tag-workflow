@@ -50,7 +50,8 @@ rule all:
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
         expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
-        "analysis/csaw_count/peaks/global_filt.rds"
+        "analysis/csaw_count/peaks/global_filt.rds",
+        expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type'])
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -596,6 +597,7 @@ rule get_std_chrom_names:
 
 rule csaw_count:
     input:
+        samplesheet=samplesheet,
         bams = lambda wildcards: expand("analysis/bowtie2/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
         std_chroms="analysis/misc/std_chroms.txt" if config['std_chroms_file'] == "" else config['std_chroms_file']
     output:
@@ -624,23 +626,35 @@ rule csaw_count:
     script:
         "bin/scripts/csaw_count.R"
 
-#rule csaw_diff:
-#    input:
-#        filt_small_wins="analysis/csaw_count/{enriched_factor}/filt_small_wins.rds",
-#        merged_peaks="analysis/{peak_type}/merged/{merge_id}.bed",
-#    output:
-#        figs_dir=directory("analysis/csaw_diff/{enriched_factor}_{merge_id}/figures")
-#    benchmark:
-#        "benchmarks/csaw_diff/{enriched_factor}.txt"
-#    params:
-#    threads: 16
-#    resources:
-#        mem_gb=396,
-#        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
-#    envmodules:
-#        config['modules']['R']
-#    script:
-#        "bin/scripts/csaw_diff.R"
+rule csaw_diff:
+    input:
+        filt_small_wins="analysis/csaw_count/{enriched_factor}/filt_small_wins.rds",
+        bin_counts="analysis/csaw_count/{enriched_factor}/binned.rds",
+        merged_peaks="analysis/{peak_type}/merged_{enriched_factor}/all.bed",
+        contrasts="bin/contrasts.tsv"
+    output:
+        edgeR_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
+        results_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results.rds",
+        results_se_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds",
+        peaks_res_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
+        combined_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
+        peaks_anno_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_anno.rds",
+        figs_dir=directory("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/figures")
+    benchmark:
+        "benchmarks/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}.txt"
+    params:
+        orgdb=config['chipseeker_params']['orgdb'],
+        txdb=config['chipseeker_params']['txdb'],
+        promo_start=config['chipseeker_params']['promoter_start'],
+        promo_end=config['chipseeker_params']['promoter_end']
+    threads: 16
+    resources:
+        mem_gb=396,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    envmodules:
+        config['modules']['R']
+    script:
+        "bin/scripts/csaw_diff.R"
 
 rule multiqc:
     input:

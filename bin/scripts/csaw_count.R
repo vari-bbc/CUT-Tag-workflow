@@ -14,6 +14,9 @@ dir.create(figs_dir, recursive=TRUE)
 # cores for parallel processing
 bp_cores <- snakemake@threads-1 
 
+# meta data
+samplesheet <- snakemake@input[["samplesheet"]]
+
 # blacklist BED file
 blacklist_file <- snakemake@params[["blacklist"]]
 
@@ -59,6 +62,12 @@ suppressPackageStartupMessages(library(magrittr))
 suppressPackageStartupMessages(library(BiocParallel))
 suppressPackageStartupMessages(library(tibble))
 suppressPackageStartupMessages(library(stringr))
+suppressPackageStartupMessages(library(readr))
+
+# read in meta data
+meta <- read_tsv(samplesheet)
+stopifnot(length(meta$sample) == length(unique(meta$sample)))
+
 
 # read in standard chromosomes file as a vector, and remove mitochondrial chromosome name
 chroms_keep_vec <- strsplit(readLines(std_chroms_file)[1], " ")[[1]] %>% 
@@ -77,7 +86,9 @@ param <- readParam(minq=minq, dedup=dedup, pe="both", restrict=chroms_keep_vec, 
 # TMM on binned counts
 
 binned <- windowCounts(bam.files, bin=TRUE, width=bkgd_bin_width, param=param, BPPARAM=MulticoreParam(bp_cores)) # note that windows with less than 'filter' number of reads summed across libraries are removed
+
 message("For TMM on background bins, ", length(binned), " bins were used.")
+colData(binned) <- cbind(colData(binned), DataFrame(meta[match(colnames(binned), meta$sample), ]))
 
 binned <- normFactors(binned, se.out=TRUE)
 saveRDS(binned, binned_rds) 
@@ -87,7 +98,13 @@ saveRDS(binned, binned_rds)
 # 'outfile' is the output file containing the colData
 calc_and_write_final_norm_facs <- function(se, outfile){
     se$final.factors <- ((se$norm.factors * colData(se)$totals) / 1000000)^-1 # Recall that the norm factors from edgeR/csaw must be multiplied by the library size to also correct for library size; this is different from and not need with the DESeq2 norm factors.
-    write.table(x = as.data.frame(colData(se)) %>% tibble::rownames_to_column("sample"),
+    coldat <- as.data.frame(colData(se))
+    if("sample" %in% colnames(coldat)){
+        stopifnot(identical(coldat$sample, rownames(coldat)))
+    } else{
+        coldat$sample <- rownames(coldat)
+    }
+    write.table(x = coldat,
                 file = outfile, sep="\t", quote = FALSE,
                 col.names = TRUE, row.names = FALSE)
 
@@ -102,6 +119,7 @@ system(str_glue("ln -sr {outCompNorm} {outCompNormLink}"))
 # TMM on high abundance regions
 
 small_wins <- windowCounts(bam.files, width=hi_abund_win_width, param=param, BPPARAM=MulticoreParam(bp_cores)) # note that windows with less than 'filter' number of reads summed across libraries are removed
+colData(small_wins) <- cbind(colData(small_wins), DataFrame(meta[match(colnames(small_wins), meta$sample), ]))
 saveRDS(small_wins, small_wins_rds) # for faster debugging
 
 filter_wins <- filterWindowsGlobal(small_wins, binned)

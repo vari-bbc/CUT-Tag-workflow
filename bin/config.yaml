@@ -26,7 +26,15 @@ addtnl_bigwig_norms:
   #- 'csaw_hiAbund'
 
 csaw:
+  norm_type: "bkgd" # options are "bkgd" "hiAbund"
+  peak_type: "macs3_narrow"
   win_width: 150 # for TFs use 10-20bp
+
+chipseeker_params:
+  orgdb: "org.Hs.eg.db"
+  txdb: "TxDb.Hsapiens.UCSC.hg38.knownGene"
+  promoter_start: -3000
+  promoter_end: 500
 
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
