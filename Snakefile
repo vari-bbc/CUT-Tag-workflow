@@ -13,6 +13,7 @@ configfile_path = "bin/config.yaml"
 configfile: configfile_path
 
 bt2_index = config['ref']['index']
+mito_chrom = config['ref']['mito_chr']
 
 ##### load config and sample sheets #####
 samplesheet="bin/samples.tsv"
@@ -39,13 +40,18 @@ if not os.path.exists(tmp_dir):
 peak_types = ['macs3_narrow']
 peak_types = peak_types + ["macs3_broad"] if config['macs3']['run_broad'] else peak_types
 
+bigwig_norms = ['baseCov']
+bigwig_norms = bigwig_norms + config['addtnl_bigwig_norms'] if isinstance(config['addtnl_bigwig_norms'], list) else bigwig_norms
+print(bigwig_norms)
+
 rule all:
     input:
         "analysis/multiqc/multiqc_report.html",
-        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples.itertuples(), norm_method = ['baseCov']),
+        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples.itertuples(), norm_method = bigwig_norms),
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
         expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
+        "analysis/csaw_count/peaks/global_filt.rds"
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -320,9 +326,46 @@ rule base_cov_scale_factors:
         echo "$scaling_factor" > {output}
         """
 
-def get_scale_factor_file (wildcards):
-    if (wildcards.scale_method == "baseCov"):
-        return "analysis/bigwig_norm_factors/base_cov_scale_factors/{sample}.tsv".format(sample=wildcards.sample)
+rule concat_base_cov_scale_factors:
+    """
+    Concatenate the total base coverage normalization factors.
+    """
+    input:
+        expand("analysis/bigwig_norm_factors/base_cov_scale_factors/{sample}.tsv", sample = samples['sample'])
+    output:
+        "analysis/bigwig_norm_factors/base_cov_scale_factors.tsv"
+    benchmark:
+        "benchmarks/bigwig_norm_factors/concat_base_cov_scale_factors.tsv"
+    params:
+    threads: 1
+    resources:
+        mem_gb=32,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    envmodules:
+    shell:
+        """
+        printf "sample\\tfinal.factors\\n" > {output}
+        for tsv in {input}
+        do
+            printf "$(basename $tsv | perl -npe 's:.tsv::')\\t$(head -n1 $tsv)\\n" >> {output}
+        done
+        """
+
+def get_scale_factor_file(wildcards):
+    curr_enriched = samples_no_controls[samples_no_controls['sample']==wildcards.sample]['enriched_factor'].values[0]
+    if (wildcards.scale_method == "csaw_bkgd"):
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_bkgd.tsv".format(enriched_factor=curr_enriched)
+    elif (wildcards.scale_method == "csaw_hiAbund"):
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_hiAbund.tsv".format(enriched_factor=curr_enriched)
+    elif (wildcards.scale_method == "baseCov"):
+        return "analysis/bigwig_norm_factors/base_cov_scale_factors.tsv"
+    else:
+        raise Exception("Could not determine scale factors file name.")
+
+def get_bigwig_norm_factor(wildcards, input):
+    df = pd.read_table(input.scale_factor)
+    scalefactor = df[df['sample']==wildcards.sample]['final.factors'].values[0]
+    return str(scalefactor)
 
 rule generate_bw:
     input:
@@ -337,14 +380,15 @@ rule generate_bw:
         config['modules']['bedtools'],
         config['modules']['ucsc']
     params:
-        chr_len=config['ref']['fai']
+        chr_len=config['ref']['fai'],
+        scale_factor=get_bigwig_norm_factor,
     threads: 4
     resources:
         mem_gb = 64,
         log_prefix=lambda wildcards: "_".join(wildcards)
     shell:
         """
-        scaling_factor=$(head -n1 {input.scale_factor})
+        scaling_factor="{params.scale_factor}"
         echo "Scaling Factor: $scaling_factor"
 
         zcat {input.gzip_bed} | bedtools genomecov -bg -i stdin -g {params.chr_len} -scale $scaling_factor > {output.bedgraph}
@@ -532,6 +576,53 @@ rule frip:
         log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
     script:
         "bin/scripts/calc_frip.R"
+
+rule get_std_chrom_names:
+    input:
+    output:
+        "analysis/misc/std_chroms.txt"
+    benchmark:
+        "benchmarks/get_std_chrom_names/bench.txt"
+    params:
+        ref_fasta=config["ref"]["sequence"],
+    threads: 1
+    resources:
+        mem_gb=20,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    envmodules:
+        config['modules']['R']
+    script:
+        "bin/scripts/get_standard_chrom_names.R"
+
+rule csaw_count:
+    input:
+        bams = lambda wildcards: expand("analysis/bowtie2/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
+        std_chroms="analysis/misc/std_chroms.txt" if config['std_chroms_file'] == "" else config['std_chroms_file']
+    output:
+        binned="analysis/csaw_count/{enriched_factor}/binned.rds",
+        small_wins="analysis/csaw_count/{enriched_factor}/small_wins.rds",
+        filt_small_wins="analysis/csaw_count/{enriched_factor}/filt_small_wins.rds",
+        global_filt="analysis/csaw_count/{enriched_factor}/global_filt.rds",
+        bkgrd_scale="analysis/csaw_count/{enriched_factor}/bkgrd_norm_factors.tsv",
+        hiAbund_scale="analysis/csaw_count/{enriched_factor}/hiAbund_norm_factors.tsv",
+        bkgrd_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_bkgd.tsv",
+        hiAbund_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_hiAbund.tsv",
+        figs_dir=directory("analysis/csaw_count/{enriched_factor}/figures")
+    benchmark:
+        "benchmarks/csaw_count/{enriched_factor}.txt"
+    params:
+        blacklist=config['ref']['blacklist'],
+        window_width=config['csaw']['win_width'],
+        mito_chr=mito_chrom,
+        samp_names=lambda wildcards, input: [os.path.basename(x).replace(".sorted.bam","") for x in input.bams]
+    threads: 16
+    resources:
+        mem_gb=396,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    envmodules:
+        config['modules']['R']
+    script:
+        "bin/scripts/csaw_count.R"
 
 rule multiqc:
     input:

@@ -4,9 +4,14 @@ ref:
   index:        /varidata/research/projects/bbc/versioned_references/latest/data/hg38_gencode/indexes/bowtie2/hg38_gencode
   fai:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa.fai
   sequence:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa
+  mito_chr: chrM
+  blacklist: /varidata/research/projects/bbc/versioned_references/latest/data/hg38_gencode/blacklist/hg38_encode_v3.bed 
 
 # remove putative PCR duplicates from BAMs
 dedup: False
+
+# OPTIONAL: space-delimited file containing the standard chromosomes for the reference genome; if not provided, standard chromosomes will be 'guessed' using GenomeInfoDb::standardChromosomes and written to analysis/misc/std_chroms.txt.
+std_chroms_file: ""
 
 macs3:
   species: "hs"
@@ -14,6 +19,14 @@ macs3:
 
 frip:
   peak_type: "macs3_narrow"
+
+# comment out what is not needed in 'addtnl_bigwig_norms'. These are additional approaches to normalize the BigWigs.
+addtnl_bigwig_norms:
+  #- 'csaw_bkgd'
+  #- 'csaw_hiAbund'
+
+csaw:
+  win_width: 150 # for TFs use 10-20bp
 
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
