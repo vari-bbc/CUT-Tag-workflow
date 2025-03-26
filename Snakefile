@@ -42,7 +42,6 @@ peak_types = peak_types + ["macs3_broad"] if config['macs3']['run_broad'] else p
 
 bigwig_norms = ['baseCov']
 bigwig_norms = bigwig_norms + config['addtnl_bigwig_norms'] if isinstance(config['addtnl_bigwig_norms'], list) else bigwig_norms
-print(bigwig_norms)
 
 rule all:
     input:
@@ -491,10 +490,11 @@ rule macs3_broad:
 
 def get_beds_for_merging (wildcards):
     curr_samples = []
-    if (wildcards.merge_id in samples_no_controls.sample_group.values):
-        curr_samples = samples_no_controls[samples_no_controls['sample_group'] == wildcards.merge_id]['sample'].values
+    df = samples_no_controls
+    if (wildcards.merge_id in df.sample_group.values):
+        curr_samples = df[(df['sample_group'] == wildcards.merge_id) & (df['enriched_factor'] == wildcards.enriched_factor)]['sample'].values
     elif (wildcards.merge_id == "all"):
-        curr_samples = samples_no_controls['sample'].values
+        curr_samples = df[df['enriched_factor'] == wildcards.enriched_factor]['sample'].values
     else:
         raise Exception("Invalid merge_id for peak merging.")
 
@@ -512,9 +512,9 @@ rule merge_peaks:
     input:
         get_beds_for_merging
     output:
-        "analysis/{peak_type}/merged/{merge_id}.bed"
+        "analysis/{peak_type}/merged_{enriched_factor}/{merge_id}.bed"
     benchmark:
-        "benchmarks/{peak_type}/merged/{merge_id}.txt"
+        "benchmarks/{peak_type}/merged_{enriched_factor}/{merge_id}.txt"
     params:
     envmodules:
         config['modules']['bedtools']
@@ -531,7 +531,7 @@ rule merge_peaks:
 rule frags_over_peaks:
     input:
         frags = "analysis/bed_files/{sample}.bed.gz",
-        peaks = "analysis/{peak_type}/merged/{merge_id}.bed"
+        peaks = lambda wildcards: "analysis/{{peak_type}}/merged_{enriched_factor}/{{merge_id}}.bed".format(enriched_factor = samples_no_controls[samples_no_controls['sample'] == wildcards.sample]['enriched_factor'].values[0])
     output:
         bed = "analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.bed",
         frag_count = "analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt"
@@ -623,6 +623,24 @@ rule csaw_count:
         config['modules']['R']
     script:
         "bin/scripts/csaw_count.R"
+
+#rule csaw_diff:
+#    input:
+#        filt_small_wins="analysis/csaw_count/{enriched_factor}/filt_small_wins.rds",
+#        merged_peaks="analysis/{peak_type}/merged/{merge_id}.bed",
+#    output:
+#        figs_dir=directory("analysis/csaw_diff/{enriched_factor}_{merge_id}/figures")
+#    benchmark:
+#        "benchmarks/csaw_diff/{enriched_factor}.txt"
+#    params:
+#    threads: 16
+#    resources:
+#        mem_gb=396,
+#        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+#    envmodules:
+#        config['modules']['R']
+#    script:
+#        "bin/scripts/csaw_diff.R"
 
 rule multiqc:
     input:
