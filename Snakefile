@@ -51,7 +51,8 @@ rule all:
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
         expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
         "analysis/csaw_count/peaks/global_filt.rds",
-        expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type'])
+        expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']),
+        expand("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type'])
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -655,6 +656,50 @@ rule csaw_diff:
         config['modules']['R']
     script:
         "bin/scripts/csaw_diff.R"
+
+rule csaw_summary:
+    input:
+        rmd="bin/scripts/csaw_summary.Rmd",
+        edgeR_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
+        peaks_res_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
+        combined_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
+    output:
+        rmd="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.Rmd",
+        edgeR_rds="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
+        peaks_res_rds="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
+        combined_rds="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
+        out_res="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/DB_results.xlsx",
+        html_report="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html",
+        figdir=directory("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/individual_figures")
+    benchmark:
+        "benchmarks/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}.txt"
+    params:
+        out_res=lambda wildcards, output: os.path.basename(output.out_res),
+        fdr_th = "0.05",
+        wd=lambda wildcards, output: os.path.dirname(output.html_report),
+        rmd = lambda wildcards, output: os.path.basename(output.rmd),
+        edgeR_rds = lambda wildcards, output: os.path.basename(output.edgeR_rds),
+        peaks_res_rds = lambda wildcards, output: os.path.basename(output.peaks_res_rds),
+        combined_rds = lambda wildcards, output: os.path.basename(output.combined_rds),
+        figdir = lambda wildcards, output: os.path.basename(output.figdir)
+    threads: 4
+    resources:
+        mem_gb=64,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    envmodules:
+        config['modules']['R'],
+        config['modules']['pandoc']
+    shell:
+        """
+        cp {input.rmd} {output.rmd}
+        cp {input.edgeR_rds} {output.edgeR_rds}
+        cp {input.peaks_res_rds} {output.peaks_res_rds}
+        cp {input.combined_rds} {output.combined_rds}
+
+        cd {params.wd}
+
+        Rscript --vanilla -e "rmarkdown::render('{params.rmd}', params = list(out_res = '{params.out_res}', fdr_th = '{params.fdr_th}', edgeR_rds = '{params.edgeR_rds}', peaks_res_rds = '{params.peaks_res_rds}', combined_rds = '{params.combined_rds}', figdir = '{params.figdir}'))"
+        """
 
 rule multiqc:
     input:

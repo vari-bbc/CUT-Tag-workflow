@@ -51,3 +51,4 @@ modules:
   picard: bbc2/picard/picard-3.0.0
   multiqc: bbc2/multiqc/multiqc-1.28
   R: bbc2/R/alt/R-4.4.2-setR_LIBS_USER-extra
+  pandoc: bbc2/pandoc/pandoc-3.1.2

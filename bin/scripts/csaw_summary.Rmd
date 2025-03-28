@@ -1,0 +1,161 @@
+---
+title: "CSAW summary"
+author: "Kin Lau"
+date: '`r format(Sys.Date(), "%B %d, %Y")`'
+output:
+  html_document:
+    code_folding: hide
+    self_contained: yes
+    toc: true
+    toc_depth: 5
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    number_sections: true
+params:
+    out_res: ""
+    edgeR_rds: ""
+    peaks_res_rds: ""
+    combined_rds: ""
+    figdir: ""
+    fdr_th: ""
+---
+
+```{r starttime}
+# save start time for script
+start_ptm <- proc.time()
+start_ptm
+
+figdir <- params$figdir
+dir.create(figdir, recursive=TRUE)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, warning=TRUE, message=TRUE, cache=FALSE, fig.path=paste0(figdir, "/"))
+```
+
+# Packages loaded
+
+```{r loadlibs, echo=TRUE, warning=TRUE, message=TRUE, cache=FALSE}
+suppressPackageStartupMessages(library(csaw))
+suppressPackageStartupMessages(library(edgeR))
+library(patchwork)
+library(readr)
+library(stringr)
+library(ggplot2)
+suppressPackageStartupMessages(library(dplyr))
+library(openxlsx)
+```
+
+# Read RDS
+
+```{r readrds}
+y <- readRDS(params$edgeR_rds)$y
+peaks_res <- readRDS(params$peaks_res_rds)
+combined <- readRDS(params$combined_rds)
+fdr_th <- as.numeric(params$fdr_th)
+out_res <- params$out_res
+```
+
+```{r out_db}
+# Output DB results
+combined_dfs <- lapply(combined, as.data.frame)
+
+openxlsx::write.xlsx(combined_dfs, out_res, overwrite = TRUE)
+
+```
+
+# DB counts
+
+```{r db_counts}
+do.call(rbind,
+        lapply(names(peaks_res), function(x){
+          with(peaks_res[[x]]$combined, data.frame(contrast = x,
+                                               UP = sum(FDR<=fdr_th & direction == "up", na.rm = TRUE),
+                                               DN = sum(FDR<=fdr_th & direction == "down", na.rm = TRUE),
+                                               mixed = sum(FDR<=fdr_th & direction == "mixed", na.rm = TRUE),
+                                               NS = sum(FDR>fdr_th, na.rm=TRUE),
+                                               no_overlap = sum(is.na(num.tests))))
+        })
+)
+
+
+```
+
+# Volcano
+
+```{r set_fig_sizes}
+# set num columns
+fig_ncol <- 3
+
+# width and height for single panel
+panel_w <- 4
+panel_h <- 3.5
+
+# determine fig width and height based on number of contrasts
+num_contrasts <- length(peaks_res)
+w <- ifelse(num_contrasts < fig_ncol, num_contrasts * panel_w, fig_ncol * panel_w)
+h <- ceiling(num_contrasts / fig_ncol) * panel_h
+
+```
+
+```{r volcano, fig.width = w, fig.height = h}
+
+patchwork::wrap_plots(
+  lapply(names(peaks_res), function(x){
+    th <- fdr_th
+    df <- as.data.frame(peaks_res[[x]]$combined) %>%
+      dplyr::mutate(sig = factor(ifelse(FDR <= th, "Sig", "NS"), levels=c("Sig", "NS"))) %>%
+      dplyr::filter(!is.na(sig))
+
+    ggplot(df, aes(x=rep.logFC, y = -log10(PValue),
+                   color=sig)) +
+      geom_point(size=0.5, show.legend = TRUE) +
+      theme_bw() +
+      ggtitle(str_glue("{x} ({sum(df$sig=='Sig')} FDR <= {th})")) +
+      scale_color_manual(breaks = levels(df$sig), values=c("red","black"), drop = FALSE) +
+      theme(title = element_text(size=7))
+  })
+) + plot_layout(nrow=1, guides = "collect")
+
+
+```
+
+# MA plot
+
+```{r ma, fig.width = w, fig.height = h}
+
+patchwork::wrap_plots(
+  lapply(names(peaks_res), function(x){
+    th <- fdr_th
+    df <- as.data.frame(peaks_res[[x]]$combined) %>%
+      dplyr::mutate(sig = factor(ifelse(FDR <= th, "Sig", "NS"), levels=c("Sig", "NS"))) %>%
+      dplyr::filter(!is.na(sig))
+
+    ggplot(df, aes(x=rep.logCPM.manual, y = rep.logFC,
+                   color=sig)) +
+      geom_point(size=0.5, show.legend = TRUE) +
+      theme_bw() +
+      ggtitle(str_glue("{x} ({sum(df$sig=='Sig')} FDR <= {th})")) +
+      scale_color_manual(breaks = levels(df$sig), values=c("red","black"), drop = FALSE) +
+      theme(title = element_text(size=7))
+  })
+) + plot_layout(nrow=1, guides = "collect")
+
+
+```
+
+
+# MDS plot
+
+```{r mds_plot, fig.width=7, fig.height=7}
+adj.counts <- cpm(y, log=TRUE)
+plotMDS(adj.counts, top=10000, col=as.integer(factor(y$samples$sample_group)))
+```
+
+# Session info
+
+```{r sessioninfo}
+sessionInfo()
+
+```
