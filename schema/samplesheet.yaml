@@ -1,0 +1,23 @@
+$schema: "http://json-schema.org/draft-06/schema#"
+description: Sample sheet scheme
+properties:
+  sample:
+    type: string
+    description: sample identifier
+    pattern: "^[a-zA-Z][^_]+$"
+  sample_group:
+    type: string
+    description: Experimental group of sample.
+    pattern: "^[a-zA-Z][^_]+$"
+  fq1:
+    type: string
+    description: fastq1 filename
+  fq2:
+    type: string
+    description: fastq2 filename
+
+required:
+  - sample
+  - fq1
+  - fq2
+  - sample_group

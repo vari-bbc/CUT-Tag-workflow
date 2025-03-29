@@ -1,17 +1,25 @@
 # path or URL to sample sheet (TSV format, columns: sample, condition, ...)
 ref:
   # path/to/bowtie2 index
-  index:        /varidata/research/projects/bbc/versioned_references/latest/data/hg38_gencode/indexes/bowtie2/hg38_gencode
+  index:        /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/indexes/bowtie2/hg38_gencode
   fai:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa.fai
   sequence:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa
-  mito_chr: chrM
-  blacklist: /varidata/research/projects/bbc/versioned_references/latest/data/hg38_gencode/blacklist/hg38_encode_v3.bed 
+  # if blacklist is provided, alignments will be filtered against these reions; set to "" if this is not desired or if blacklist is not available
+  blacklist: /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/blacklist/hg38_encode_v3.bed 
 
-# remove putative PCR duplicates from BAMs
-dedup: False
+# OPTIONAL: space-delimited file (one line) containing the chromosomes to keep (e.g. the chromosomes, not the unplaced contigs)
+keep_chroms_file: ""
 
-# OPTIONAL: space-delimited file containing the standard chromosomes for the reference genome; if not provided, standard chromosomes will be 'guessed' using GenomeInfoDb::standardChromosomes and written to analysis/misc/std_chroms.txt.
-std_chroms_file: ""
+# Ignored if 'keep_chroms_file' is set. If True, standard chromosomes will be 'guessed' using GenomeInfoDb::standardChromosomes.
+keep_std_chroms: True 
+
+# Ignored if 'keep_chroms_file' is set. Comma-separated string; use "" if no chromosomes to remove.
+rm_chroms: "chrM" 
+
+# Alignment filtering options. Duplicates are marked, so one could filter out duplicates using SAM flags.
+samtools_mapq: 20
+samtools_keep_flags: ""
+samtools_omit_flags: ""
 
 macs3:
   species: "hs"
@@ -22,8 +30,8 @@ frip:
 
 # comment out what is not needed in 'addtnl_bigwig_norms'. These are additional approaches to normalize the BigWigs.
 addtnl_bigwig_norms:
-  #- 'csaw_bkgd'
-  #- 'csaw_hiAbund'
+  - 'csaw_bkgd'
+  - 'csaw_hiAbund'
 
 csaw:
   norm_type: "bkgd" # options are "bkgd" "hiAbund"
@@ -39,7 +47,7 @@ chipseeker_params:
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
   bowtie2:  bbc2/bowtie2/bowtie2-2.5.1
-  samtools: bbc2/samtools/samtools-1.20
+  samtools: bbc2/samtools/samtools-1.21
   bedtools: bbc2/bedtools/bedtools-2.30.0
   ucsc: bbc2/kent-core/kent-core-v448 
   fastqc: bbc2/fastqc/fastqc-0.12.1
@@ -52,3 +60,4 @@ modules:
   multiqc: bbc2/multiqc/multiqc-1.28
   R: bbc2/R/alt/R-4.4.2-setR_LIBS_USER-extra
   pandoc: bbc2/pandoc/pandoc-3.1.2
+  qualimap: bbc2/qualimap/qualimap_v.2.2.2

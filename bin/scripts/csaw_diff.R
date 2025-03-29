@@ -19,6 +19,7 @@ filt <- snakemake@input[['filt_small_wins']]
 binned <- snakemake@input[['bin_counts']]
 peaks <- snakemake@input[['merged_peaks']]
 norm_type <- snakemake@wildcards[['norm_type']]
+enriched_factor <- snakemake@wildcards[['enriched_factor']]
 
 # output RDS objects
 results_rds <- snakemake@output[['results_rds']]
@@ -32,6 +33,7 @@ orgdb_pkg <- snakemake@params[['orgdb']]
 txdb_pkg <- snakemake@params[['txdb']]
 promo_start <- as.integer(snakemake@params[['promo_start']])
 promo_end <- as.integer(snakemake@params[['promo_end']])
+
 
 ##########
 ##########
@@ -57,6 +59,7 @@ suppressPackageStartupMessages(library(txdb_pkg, character.only = TRUE))
 filt <- readRDS(filt)
 binned <- readRDS(binned)
 contrasts <- read_tsv(contrasts_file)
+contrasts <- contrasts[which(contrasts$enriched_factor == enriched_factor), ]
 
 peaks <- import(peaks)
 peaks <- keepStandardChromosomes(peaks, pruning.mode = "coarse")
@@ -84,6 +87,13 @@ colnames(y) <- y$samples$sample
 design <- model.matrix(~0+sample_group, data = y$samples)
 colnames(design) <- str_remove(colnames(design), "^sample_group")
 
+# vector of strings describing contrast in the from "B-A" where B and A are levels in the sample_group column
+comps <- paste(contrasts[["group2"]], contrasts[["group1"]], sep="-")
+#print(design)
+#print(contrasts)
+stopifnot(all(c(contrasts[["group1"]], contrasts[["group2"]]) %in% colnames(design)))
+cons <- makeContrasts(contrasts=comps, levels=design)
+
 y <- estimateDisp(y, design)
 summary(y$trended.dispersion)
 
@@ -98,12 +108,6 @@ plot(y$AveLogCPM[o], sqrt(y$trended.dispersion[o]), type="l", lwd=2,
      ylab=("Biological coefficient of variation"))
 plotQLDisp(fit)
 dev.off()
-
-# vector of strings describing contrast in the from "B-A" where B and A are levels in the sample_group column
-comps <- paste(contrasts["group2"], contrasts["group1"], sep="-")
-
-stopifnot(all(c(contrasts["group1"], contrasts["group2"]) %in% colnames(design)))
-cons <- makeContrasts(contrasts=comps, levels=design)
 
 results <- lapply(setNames(nm=colnames(cons)), function(x){
   glmQLFTest(fit, contrast = cons[, x])

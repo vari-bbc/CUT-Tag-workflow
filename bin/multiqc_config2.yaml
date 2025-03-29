@@ -1,3 +1,51 @@
+top_modules:
+    - fastqc:
+        name: 'FastQC (raw)'
+        path_filters:
+            - '*/fastqc/*_fastqc.zip'
+    - fastqc:
+        name: 'FastQC (trimmed)'
+        info: 'This section of the report shows FastQC results after adapter trimming.'
+        target: ''
+        path_filters:
+            - '*/trim_galore/*_fastqc.zip'
+    - cutadapt
+    - samtools:
+        name: 'Samtools (pre-filtering)'
+        path_filters:
+            - '*/bowtie2/*'
+    - samtools:
+        name: 'Samtools (post-filtering)'
+        info: 'Samtools after filtering'
+        target: ''
+        path_filters:
+            - '*/bowtie2_filt/*'
+    - picard:
+        name: 'Picard (pre-filtering)'
+        info: 'Picard metrics; Recall that Picard removes duplicates by default for insert size distribution.'
+        path_filters:
+            - '*/bowtie2/*'
+    - picard:
+        name: 'Picard (post-filtering)'
+        info: 'Picard metrics after filtering'
+        target: ''
+        path_filters:
+            - '*/bowtie2_filt/*'
+    - qualimap:
+        name: 'Qualimap (pre-filtering)'
+        path_filters:
+            - '*/bowtie2/*'
+    - qualimap:
+        name: 'Qualimap (post-filtering)'
+        info: 'Qualimap after filtering'
+        target: ''
+        path_filters:
+            - '*/bowtie2_filt/*'
+
+extra_fn_clean_trim:
+     - "_val_1"
+     - "_val_2"
+
 # Other MultiQC config stuff here
 custom_data:
   all_frip:

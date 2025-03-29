@@ -13,16 +13,21 @@ configfile_path = "bin/config.yaml"
 configfile: configfile_path
 
 bt2_index = config['ref']['index']
-mito_chrom = config['ref']['mito_chr']
 
 ##### load config and sample sheets #####
 samplesheet="bin/samples.tsv"
 units = pd.read_table(samplesheet, dtype={"sample" : str, "sample_group" : str })
-units['se_or_pe'] = ["SE" if x else "PE" for x in units['fq2'].isnull()]
 
-samples = units[["sample","control","sample_group","enriched_factor","se_or_pe"]].drop_duplicates()
+validate(units, "schema/samplesheet.yaml")
+
+contrasts_file="bin/contrasts.tsv"
+contrasts = pd.read_table(contrasts_file, dtype={"group1" : str, "group2" : str , "enriched_factor" : str})
+validate(contrasts, "schema/contrasts.yaml")
+contrasts["enriched_factor"] = contrasts["enriched_factor"].fillna("peaks")
+
+samples = units[["sample","control","sample_group","enriched_factor"]].drop_duplicates()
 if not samples['sample'].is_unique:
-    raise Exception('A sample has more than one combination of control, sample_group, enriched_factor, and/or se_or_pe.')
+    raise Exception('A sample has more than one combination of control, sample_group, enriched_factor.')
 
 # Filter for sample rows that are not controls
 controls_list = list(itertools.chain.from_iterable( [x.split(',') for x in samples['control'].values if not pd.isnull(x)] ))
@@ -46,11 +51,12 @@ bigwig_norms = bigwig_norms + config['addtnl_bigwig_norms'] if isinstance(config
 rule all:
     input:
         "analysis/multiqc/multiqc_report.html",
-        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples.itertuples(), norm_method = bigwig_norms),
+        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples.itertuples(), norm_method = [k for k in bigwig_norms if not 'csaw' in k]),
+        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples_no_controls.itertuples(), norm_method = [k for k in bigwig_norms if 'csaw' in k]),
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
-        expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
-        "analysis/csaw_count/peaks/global_filt.rds",
+        #expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
+        #"analysis/csaw_count/peaks/global_filt.rds",
         expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']),
         expand("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type'])
 
@@ -145,14 +151,12 @@ rule bowtie2:
         R2_trimmed="analysis/trim_galore/{sample}_R2_val_2.fq.gz"   
     output:
         sorted_bam="analysis/bowtie2/{sample}.sorted.bam",
-        unsorted_bam=temp("analysis/bowtie2/{sample}.bam"),
+        unsorted_bam="analysis/bowtie2/{sample}.bam",
         outbai="analysis/bowtie2/{sample}.sorted.bam.bai",
     benchmark:
         "benchmarks/bowtie2/{sample}.txt"
     params:
         bt2_index=bt2_index,
-        samblaster_params=lambda wildcards: "--addMateTags" if samples[samples['sample']==wildcards.sample]['se_or_pe'].values=="PE" else "--ignoreUnmated",
-        dedup_params="--removeDups" if config['dedup'] else "",
     threads: 16
     envmodules:
         config['modules']['bowtie2'],
@@ -163,21 +167,112 @@ rule bowtie2:
         log_prefix=lambda wildcards: "_".join(wildcards)
     shell:
         """
-        bowtie2 -p 16 --very-sensitive-local --soft-clipped-unmapped-tlen --no-mixed --no-discordant --dovetail --phred33 \
+        bowtie2 -p {threads} --very-sensitive-local --soft-clipped-unmapped-tlen --no-mixed --no-discordant --dovetail --phred33 \
         -I 10 -X 1000 -x {params.bt2_index} -1 {input.R1_trimmed} -2 {input.R2_trimmed} | \
-        samblaster {params.dedup_params} | \
+        samblaster | \
         samtools view -bS \
         -@ {threads} \
         -O "BAM" \
         -o {output.unsorted_bam} 
         
-        samtools sort {output.unsorted_bam} -m 6G -O "bam" -o {output.sorted_bam}
+        samtools sort -m 6G -O "bam" -@ {threads} -o {output.sorted_bam} {output.unsorted_bam}
         samtools index -@ {threads} {output.sorted_bam}
-        echo "END indexing"
-        echo "END indexing" 1>&2
 
         """
 
+
+rule get_keep_chrom_names:
+    input:
+        ref_fasta=config["ref"]["sequence"],
+    output:
+        "analysis/misc/keep_chroms.txt"
+    benchmark:
+        "benchmarks/get_keep_chrom_names/bench.txt"
+    params:
+        keep_std_chroms=config["keep_std_chroms"],
+        rm_chroms="foobar" if config["rm_chroms"] == "" else config["rm_chroms"],
+    threads: 1
+    resources:
+        mem_gb=20,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    envmodules:
+        config['modules']['R']
+    script:
+        "bin/scripts/get_keep_chrom_names.R"
+
+def get_keep_regions (wildcards):
+    cmd = ""
+    if config['ref']['blacklist'] == "":
+        cmd = "perl -F/\t/ -lane qq|print $F[0]\t0\t$F[1]\n|" + config['ref']['fai']
+    else:
+        cmd = "bedtools sort -i " + config['ref']['blacklist'] + " -g " + config['ref']['fai'] + " | bedtools complement -i 'stdin' -g " + config['ref']['fai']
+
+    return cmd
+
+rule make_keep_regions_bed:
+    """
+    Define regions to keep alignments for. First, find the complement of blacklist regions (if provided) then keep only standard chromosomes (removing certain chromosomes if requested).
+    """
+    input:
+        keep_chroms = "analysis/misc/keep_chroms.txt" if config['keep_chroms_file'] == "" else config['keep_chroms_file'],
+    output:
+        keep_regions_temp = "analysis/misc/keep_regions.bed.temp",
+        keep_regions = "analysis/misc/keep_regions.bed"
+    params:
+        keep_regions = get_keep_regions,
+    benchmark:
+        "benchmarks/make_keep_regions_bed/bench.txt"
+    envmodules:
+        config['modules']['bedtools'],
+    threads: 8
+    resources:
+        mem_gb = 96,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    shell:
+        """
+        {params.keep_regions} > {output.keep_regions_temp}
+
+        for chr in $(cat {input.keep_chroms})
+        do
+            grep -P "^$chr\t" {output.keep_regions_temp} >> {output.keep_regions} 
+        done
+
+        """
+
+rule filter_bams:
+    """
+    Filter BAMs. After filters, fixmate will be run to update SAM flags for pairs where one mate is removed and then filtered for properly paired alignments
+    """
+    input:
+        bam = "analysis/{align_dirname}/{bam_name}.sorted.bam",
+        keep_regions = "analysis/misc/keep_regions.bed"
+    output:
+        sorted_bam="analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
+        sorted_bai="analysis/{align_dirname}_filt/{bam_name}.sorted.bam.bai",
+        bam="analysis/{align_dirname}_filt/{bam_name}.bam",
+    params:
+        view_mapq="" if config['samtools_mapq'] == "" else "-q {mapq}".format(mapq=config['samtools_mapq']),
+        view_keep="" if config['samtools_keep_flags'] == "" else "-f {flag}".format(flag=config['samtools_keep_flags']),
+        view_omit="" if config['samtools_omit_flags'] == "" else "-F {flag}".format(flag=config['samtools_omit_flags']),
+    benchmark:
+        "benchmarks/{align_dirname}_filt/{bam_name}.txt"
+    envmodules:
+        config['modules']['samtools']
+    threads: 8
+    resources:
+        mem_gb = 96,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        samtools view -@ {threads} -u --region-file {input.keep_regions} {params.view_mapq} {params.view_keep} {params.view_omit} {input.bam} | \
+        samtools sort -@ {threads} -n -u - | \
+        samtools fixmate -@ {threads} -u - - | \
+        samtools view -@ {threads} -f 2 -o {output.bam} -
+
+        samtools sort -@ {threads} -o {output.sorted_bam} {output.bam}
+        samtools index -@ {threads} {output.sorted_bam}
+
+        """
 
 rule idxstats:
     """
@@ -247,6 +342,30 @@ rule CollectAlignmentSummaryMetrics:
         java -Xms8g -Xmx{resources.mem_gb}g -Djava.io.tmpdir={params.temp} -jar $PICARD CollectAlignmentSummaryMetrics I={input} O={output.out} R={params.reffasta}
         """
 
+rule qualimap:
+    """
+    Run qualimap on unfiltered alignments.
+    """
+    input:
+        "analysis/{align_dirname}/{sample}.sorted.bam",
+    output:
+        done=touch("analysis/{align_dirname}/qualimap/{sample}/done")
+    benchmark:
+        "benchmarks/{align_dirname}/qualimap/{sample}.txt"
+    envmodules:
+        config['modules']['qualimap']
+    params:
+        outdir=lambda wildcards,output: os.path.dirname(output.done)
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    threads: 8
+    shell:
+        """
+        qualimap bamqc -bam {input} --java-mem-size={resources.mem_gb}G --paint-chromosome-limits -outdir {params.outdir} -nt {threads}
+
+        """
+
 rule CollectInsertSizeMetrics:
     """
     Run Picard CollectInsertSizeMetrics.
@@ -277,7 +396,7 @@ rule convert_bam:
     Assumes non-discordant alignments as it outputs a BED file that represents the alignment of the fragment not the individual reads.
     """
     input:
-        bam="analysis/bowtie2/{sample}.bam"
+        bam="analysis/bowtie2_filt/{sample}.bam"
     output:
         sorted_bed=temp("analysis/bed_files/{sample}.bed"),
         gzip_bed="analysis/bed_files/{sample}.bed.gz"
@@ -353,7 +472,9 @@ rule concat_base_cov_scale_factors:
         """
 
 def get_scale_factor_file(wildcards):
-    curr_enriched = samples_no_controls[samples_no_controls['sample']==wildcards.sample]['enriched_factor'].values[0]
+    curr_enriched = ""
+    if (wildcards.sample in samples_no_controls['sample'].values):
+        curr_enriched = samples_no_controls[samples_no_controls['sample']==wildcards.sample]['enriched_factor'].values[0]
     if (wildcards.scale_method == "csaw_bkgd"):
         return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_bkgd.tsv".format(enriched_factor=curr_enriched)
     elif (wildcards.scale_method == "csaw_hiAbund"):
@@ -402,12 +523,12 @@ rule generate_bw:
 
 
 def get_macs3_bams(wildcards):
-    macs3_bams = { 'trt': "analysis/bowtie2/{sample}.sorted.bam".format(sample=wildcards.sample) }
+    macs3_bams = { 'trt': "analysis/bowtie2_filt/{sample}.sorted.bam".format(sample=wildcards.sample) }
     
     control = samples[samples['sample'] == wildcards.sample]['control'].values[0]
     
     if (not pd.isnull(control)):
-        macs3_bams['control'] = expand("analysis/bowtie2/{sample}.sorted.bam", sample = control.split(','))
+        macs3_bams['control'] = expand("analysis/bowtie2_filt/{sample}.sorted.bam", sample = control.split(','))
     
     return macs3_bams
 
@@ -556,7 +677,8 @@ rule frags_over_peaks:
         """
 
 def get_frag_count_files (wildcards):
-    out_files=expand("analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt", peak_type = config['frip']['peak_type'], merge_id = samples_no_controls['sample_group'].tolist() + ['all'], sample = samples_no_controls['sample'])
+    out_files = expand("analysis/frags_over_peaks/{peak_type}/{sample.sample_group}/{sample.sample}.txt", peak_type = config['frip']['peak_type'], sample = samples_no_controls.itertuples())
+    out_files = out_files + expand("analysis/frags_over_peaks/{peak_type}/all/{sample.sample}.txt", peak_type = config['frip']['peak_type'], sample = samples_no_controls.itertuples())
     return out_files
 
 rule frip:
@@ -569,7 +691,8 @@ rule frip:
     benchmark:
         "benchmarks/frags_over_peaks/frip.txt"
     params:
-        peak_type=config['frip']['peak_type']
+        peak_type=config['frip']['peak_type'],
+        noncontrol_samples=','.join(samples_no_controls['sample'].values)
     envmodules:
         config['modules']['R']
     threads: 1
@@ -579,28 +702,11 @@ rule frip:
     script:
         "bin/scripts/calc_frip.R"
 
-rule get_std_chrom_names:
-    input:
-    output:
-        "analysis/misc/std_chroms.txt"
-    benchmark:
-        "benchmarks/get_std_chrom_names/bench.txt"
-    params:
-        ref_fasta=config["ref"]["sequence"],
-    threads: 1
-    resources:
-        mem_gb=20,
-        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
-    envmodules:
-        config['modules']['R']
-    script:
-        "bin/scripts/get_standard_chrom_names.R"
 
 rule csaw_count:
     input:
         samplesheet=samplesheet,
-        bams = lambda wildcards: expand("analysis/bowtie2/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
-        std_chroms="analysis/misc/std_chroms.txt" if config['std_chroms_file'] == "" else config['std_chroms_file']
+        bams = lambda wildcards: expand("analysis/bowtie2_filt/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
     output:
         binned="analysis/csaw_count/{enriched_factor}/binned.rds",
         small_wins="analysis/csaw_count/{enriched_factor}/small_wins.rds",
@@ -614,10 +720,8 @@ rule csaw_count:
     benchmark:
         "benchmarks/csaw_count/{enriched_factor}.txt"
     params:
-        blacklist=config['ref']['blacklist'],
         window_width=config['csaw']['win_width'],
-        mito_chr=mito_chrom,
-        samp_names=lambda wildcards, input: [os.path.basename(x).replace(".sorted.bam","") for x in input.bams]
+        samp_names=lambda wildcards, input: [os.path.basename(x).replace(".sorted.bam","") for x in input.bams],
     threads: 16
     resources:
         mem_gb=396,
@@ -706,10 +810,11 @@ rule multiqc:
         expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()),
         expand("analysis/fastqc/{sample.sample}_R2_fastqc.html", sample=samples.itertuples()),
         expand("analysis/trim_galore/{sample.sample}_R{read}_val_{read}_fastqc.html", sample=samples.itertuples(), read=["1","2"]),
-        expand("analysis/bowtie2/idxstats/{sample.sample}.idxstats", sample=samples.itertuples()),
-        expand("analysis/bowtie2/flagstat/{sample.sample}.flagstat", sample=samples.itertuples()),
-        expand("analysis/bowtie2/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples()),
-        expand("analysis/bowtie2/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples()),
+        expand("analysis/{align_dir}/idxstats/{sample.sample}.idxstats", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
+        expand("analysis/{align_dir}/flagstat/{sample.sample}.flagstat", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
+        expand("analysis/{align_dir}/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
+        expand("analysis/{align_dir}/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
+        expand("analysis/{align_dir}/qualimap/{sample.sample}/done", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
         expand("analysis/macs3_narrow/{sample.sample}_peaks.xls", sample=samples.itertuples()),
         expand("analysis/frags_over_peaks/{peak_type}_frip.csv", peak_type = ['all','group'])
     output:
