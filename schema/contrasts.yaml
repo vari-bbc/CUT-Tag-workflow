@@ -1,0 +1,17 @@
+$schema: "http://json-schema.org/draft-06/schema#"
+description: Contrasts sheet scheme
+properties:
+  group1:
+    type: string
+    description: Group1
+  group2:
+    type: string
+    description: Group2
+  enriched_factor:
+    type: string
+    default: peaks
+    description: enriched factor
+
+required:
+  - group1
+  - group2
