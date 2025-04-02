@@ -31,7 +31,7 @@ dir.create(figdir, recursive=TRUE)
 ```
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo=TRUE, warning=TRUE, message=TRUE, cache=FALSE, fig.path=paste0(figdir, "/"))
+knitr::opts_chunk$set(echo=TRUE, warning=TRUE, message=TRUE, cache=FALSE, dev=c('png', 'pdf'), fig.path=paste0(figdir, "/"))
 ```
 
 # Packages loaded
@@ -116,7 +116,7 @@ patchwork::wrap_plots(
       scale_color_manual(breaks = levels(df$sig), values=c("red","black"), drop = FALSE) +
       theme(title = element_text(size=7))
   })
-) + plot_layout(nrow=1, guides = "collect")
+) + plot_layout(ncol=fig_ncol, guides = "collect")
 
 
 ```
@@ -140,7 +140,7 @@ patchwork::wrap_plots(
       scale_color_manual(breaks = levels(df$sig), values=c("red","black"), drop = FALSE) +
       theme(title = element_text(size=7))
   })
-) + plot_layout(nrow=1, guides = "collect")
+) + plot_layout(ncol=fig_ncol, guides = "collect")
 
 
 ```
