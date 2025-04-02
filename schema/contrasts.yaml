@@ -7,10 +7,6 @@ properties:
   group2:
     type: string
     description: Group2
-  enriched_factor:
-    type: string
-    default: peaks
-    description: enriched factor
 
 required:
   - group1

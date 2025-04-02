@@ -59,7 +59,13 @@ suppressPackageStartupMessages(library(txdb_pkg, character.only = TRUE))
 filt <- readRDS(filt)
 binned <- readRDS(binned)
 contrasts <- read_tsv(contrasts_file)
-contrasts <- contrasts[which(contrasts$enriched_factor == enriched_factor), ]
+contrasts <- contrasts %>%
+    dplyr::filter(group1 %in% filt$sample_group & group2 %in% filt$sample_group) %>%
+    unique()
+
+if (nrow(contrasts) < 1){
+    stop(str_glue("No valid contrasts specified for {enriched_factor}"))
+}
 
 peaks <- import(peaks)
 peaks <- keepStandardChromosomes(peaks, pruning.mode = "coarse")

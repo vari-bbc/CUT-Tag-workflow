@@ -23,11 +23,14 @@ validate(units, "schema/samplesheet.yaml")
 contrasts_file="bin/contrasts.tsv"
 contrasts = pd.read_table(contrasts_file, dtype={"group1" : str, "group2" : str , "enriched_factor" : str})
 validate(contrasts, "schema/contrasts.yaml")
-contrasts["enriched_factor"] = contrasts["enriched_factor"].fillna("peaks")
 
 samples = units[["sample","control","sample_group","enriched_factor"]].drop_duplicates()
 if not samples['sample'].is_unique:
     raise Exception('A sample has more than one combination of control, sample_group, enriched_factor.')
+
+sample_grps_df = units[["sample_group","enriched_factor"]].drop_duplicates()
+if not sample_grps_df['sample_group'].is_unique:
+    raise Exception('Sample group must be unique across enriched_factor levels.')
 
 # Filter for sample rows that are not controls
 controls_list = list(itertools.chain.from_iterable( [x.split(',') for x in samples['control'].values if not pd.isnull(x)] ))
@@ -57,8 +60,8 @@ rule all:
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
         #expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
         #"analysis/csaw_count/peaks/global_filt.rds",
-        expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']),
-        expand("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type'])
+        #expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']),
+        expand("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else []
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
