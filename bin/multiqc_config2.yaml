@@ -61,6 +61,7 @@ custom_data:
       title: "FRiP"
       ylab: "FRiP"
       cpswitch_c_active: False
+      sort_samples: False
   group_frip:
     parent_id: "FRiP"
     file_format: "csv"
@@ -72,6 +73,7 @@ custom_data:
       title: "FRiP"
       ylab: "FRiP"
       cpswitch_c_active: False
+      sort_samples: False
 sp:
   all_frip:
     fn: "all_frip.csv"

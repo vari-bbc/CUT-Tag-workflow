@@ -19,6 +19,7 @@ library(readr)
 
 meta <- read_tsv(samplesheet) %>%
     dplyr::filter(sample %in% str_split_1(noncontrol_samples, ",")) %>%
+    dplyr::arrange(enriched_factor, sample_group, sample) %>%
     dplyr::select(sample, sample_group) %>%
     unique()
 
