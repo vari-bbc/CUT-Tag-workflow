@@ -153,8 +153,8 @@ rule bowtie2:
         R1_trimmed="analysis/trim_galore/{sample}_R1_val_1.fq.gz",
         R2_trimmed="analysis/trim_galore/{sample}_R2_val_2.fq.gz"   
     output:
-        sorted_bam="analysis/bowtie2/{sample}.sorted.bam",
-        unsorted_bam="analysis/bowtie2/{sample}.bam",
+        sorted_bam=temp("analysis/bowtie2/{sample}.sorted.bam") if config['cleanup_big_files']['unfilt_coordsorted_bams'] else "analysis/bowtie2/{sample}.sorted.bam",
+        unsorted_bam=temp("analysis/bowtie2/{sample}.bam") if config['cleanup_big_files']['unfilt_namesorted_bams'] else "analysis/bowtie2/{sample}.bam",
         outbai="analysis/bowtie2/{sample}.sorted.bam.bai",
     benchmark:
         "benchmarks/bowtie2/{sample}.txt"
@@ -250,9 +250,9 @@ rule filter_bams:
         bam = "analysis/{align_dirname}/{bam_name}.sorted.bam",
         keep_regions = "analysis/misc/keep_regions.bed"
     output:
-        sorted_bam="analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
+        sorted_bam=temp("analysis/{align_dirname}_filt/{bam_name}.sorted.bam") if config['cleanup_big_files']['filt_coordsorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
         sorted_bai="analysis/{align_dirname}_filt/{bam_name}.sorted.bam.bai",
-        bam="analysis/{align_dirname}_filt/{bam_name}.bam",
+        bam=temp("analysis/{align_dirname}_filt/{bam_name}.bam") if config['cleanup_big_files']['filt_namesorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.bam",
     params:
         view_mapq="" if config['samtools_mapq'] == "" else "-q {mapq}".format(mapq=config['samtools_mapq']),
         view_keep="" if config['samtools_keep_flags'] == "" else "-f {flag}".format(flag=config['samtools_keep_flags']),
@@ -659,7 +659,7 @@ rule frags_over_peaks:
         frags = "analysis/bed_files/{sample}.bed.gz",
         peaks = lambda wildcards: "analysis/{{peak_type}}/merged_{enriched_factor}/{{merge_id}}.bed".format(enriched_factor = samples_no_controls[samples_no_controls['sample'] == wildcards.sample]['enriched_factor'].values[0])
     output:
-        bed = "analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.bed",
+        bed = temp("analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.bed"),
         frag_count = "analysis/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt"
     benchmark:
         "benchmarks/frags_over_peaks/{peak_type}/{merge_id}/{sample}.txt"

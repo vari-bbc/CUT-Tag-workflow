@@ -46,6 +46,13 @@ chipseeker_params:
   promoter_start: -3000
   promoter_end: 500
 
+# Delete big intermediate files
+cleanup_big_files:
+  unfilt_namesorted_bams: True
+  unfilt_coordsorted_bams: True
+  filt_namesorted_bams: True
+  filt_coordsorted_bams: True
+
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
   bowtie2:  bbc2/bowtie2/bowtie2-2.5.1
