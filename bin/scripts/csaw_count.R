@@ -56,6 +56,7 @@ suppressPackageStartupMessages(library(readr))
 
 # read in meta data
 meta <- read_tsv(samplesheet) %>%
+    dplyr::filter(sample %in% names(bam.files)) %>%
     dplyr::select(-fq1, -fq2) %>%
     unique()
 stopifnot(length(meta$sample) == length(unique(meta$sample)))
