@@ -51,6 +51,8 @@ peak_types = peak_types + ["macs3_broad"] if config['macs3']['run_broad'] else p
 bigwig_norms = ['baseCov']
 bigwig_norms = bigwig_norms + config['addtnl_bigwig_norms'] if isinstance(config['addtnl_bigwig_norms'], list) else bigwig_norms
 
+csaw_win_sizes = config['csaw']['win_width']
+
 rule all:
     input:
         "analysis/multiqc/multiqc_report.html",
@@ -58,10 +60,7 @@ rule all:
         expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples_no_controls.itertuples(), norm_method = [k for k in bigwig_norms if 'csaw' in k]),
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
-        #expand("analysis/{peak_type}/merged/{merge_id}.bed", peak_type = peak_types, merge_id = sample_groups + ['all']),
-        #"analysis/csaw_count/peaks/global_filt.rds",
-        #expand("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']),
-        expand("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else []
+        expand("analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", width=csaw_win_sizes, enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else []
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -479,9 +478,9 @@ def get_scale_factor_file(wildcards):
     if (wildcards.sample in samples_no_controls['sample'].values):
         curr_enriched = samples_no_controls[samples_no_controls['sample']==wildcards.sample]['enriched_factor'].values[0]
     if (wildcards.scale_method == "csaw_bkgd"):
-        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_bkgd.tsv".format(enriched_factor=curr_enriched)
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "csaw_hiAbund"):
-        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_hiAbund.tsv".format(enriched_factor=curr_enriched)
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "baseCov"):
         return "analysis/bigwig_norm_factors/base_cov_scale_factors.tsv"
     else:
@@ -711,19 +710,19 @@ rule csaw_count:
         samplesheet=samplesheet,
         bams = lambda wildcards: expand("analysis/bowtie2_filt/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
     output:
-        binned="analysis/csaw_count/{enriched_factor}/binned.rds",
-        small_wins="analysis/csaw_count/{enriched_factor}/small_wins.rds",
-        filt_small_wins="analysis/csaw_count/{enriched_factor}/filt_small_wins.rds",
-        global_filt="analysis/csaw_count/{enriched_factor}/global_filt.rds",
-        bkgrd_scale="analysis/csaw_count/{enriched_factor}/bkgrd_norm_factors.tsv",
-        hiAbund_scale="analysis/csaw_count/{enriched_factor}/hiAbund_norm_factors.tsv",
-        bkgrd_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_bkgd.tsv",
-        hiAbund_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_hiAbund.tsv",
-        figs_dir=directory("analysis/csaw_count/{enriched_factor}/figures")
+        binned="analysis/csaw_win{width}/csaw_count/{enriched_factor}/binned.rds",
+        small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/small_wins.rds",
+        filt_small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/filt_small_wins.rds",
+        global_filt="analysis/csaw_win{width}/csaw_count/{enriched_factor}/global_filt.rds",
+        bkgrd_scale="analysis/csaw_win{width}/csaw_count/{enriched_factor}/bkgrd_norm_factors.tsv",
+        hiAbund_scale="analysis/csaw_win{width}/csaw_count/{enriched_factor}/hiAbund_norm_factors.tsv",
+        bkgrd_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd.tsv",
+        hiAbund_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund.tsv",
+        figs_dir=directory("analysis/csaw_win{width}/csaw_count/{enriched_factor}/figures")
     benchmark:
-        "benchmarks/csaw_count/{enriched_factor}.txt"
+        "benchmarks/csaw_win{width}/csaw_count/{enriched_factor}.txt"
     params:
-        window_width=config['csaw']['win_width'],
+        window_width="{width}",
         samp_names=lambda wildcards, input: [os.path.basename(x).replace(".sorted.bam","") for x in input.bams],
     threads: 16
     resources:
@@ -736,20 +735,20 @@ rule csaw_count:
 
 rule csaw_diff:
     input:
-        filt_small_wins="analysis/csaw_count/{enriched_factor}/filt_small_wins.rds",
-        bin_counts="analysis/csaw_count/{enriched_factor}/binned.rds",
+        filt_small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/filt_small_wins.rds",
+        bin_counts="analysis/csaw_win{width}/csaw_count/{enriched_factor}/binned.rds",
         merged_peaks="analysis/{peak_type}/merged_{enriched_factor}/all.bed",
         contrasts="bin/contrasts.tsv"
     output:
-        edgeR_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
-        results_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results.rds",
-        results_se_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds",
-        peaks_res_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
-        combined_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
-        peaks_anno_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_anno.rds",
-        figs_dir=directory("analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/figures")
+        edgeR_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
+        results_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results.rds",
+        results_se_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/results_se.rds",
+        peaks_res_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
+        combined_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
+        peaks_anno_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_anno.rds",
+        figs_dir=directory("analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/figures")
     benchmark:
-        "benchmarks/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}.txt"
+        "benchmarks/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}.txt"
     params:
         orgdb=config['chipseeker_params']['orgdb'],
         txdb=config['chipseeker_params']['txdb'],
@@ -767,19 +766,19 @@ rule csaw_diff:
 rule csaw_summary:
     input:
         rmd="bin/scripts/csaw_summary.Rmd",
-        edgeR_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
-        peaks_res_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
-        combined_rds="analysis/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
+        edgeR_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
+        peaks_res_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
+        combined_rds="analysis/csaw_win{width}/csaw_diff/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
     output:
-        rmd="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.Rmd",
-        edgeR_rds="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
-        peaks_res_rds="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
-        combined_rds="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
-        out_res="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/DB_results.xlsx",
-        html_report="analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html",
-        figdir=directory("analysis/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/individual_figures")
+        rmd="analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.Rmd",
+        edgeR_rds="analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/edgeR_objs.rds",
+        peaks_res_rds="analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/peaks_res.rds",
+        combined_rds="analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/combined.rds",
+        out_res="analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/DB_results.xlsx",
+        html_report="analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html",
+        figdir=directory("analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/individual_figures")
     benchmark:
-        "benchmarks/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}.txt"
+        "benchmarks/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}.txt"
     params:
         out_res=lambda wildcards, output: os.path.basename(output.out_res),
         fdr_th = "0.05",

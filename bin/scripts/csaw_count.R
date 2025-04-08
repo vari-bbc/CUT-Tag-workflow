@@ -34,7 +34,7 @@ outEffNormLink <- snakemake@output[["hiAbund_scale_link"]]
 
 # csaw params
 bkgd_bin_width <- 10000
-hi_abund_win_width <- snakemake@params[["window_width"]]
+hi_abund_win_width <- as.numeric(snakemake@params[["window_width"]])
 win_filter_fold <- 3 # fold change from background to keep as high abundance windows
 hi_abund_th <- log2(win_filter_fold)
 

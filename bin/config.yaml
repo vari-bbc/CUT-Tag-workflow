@@ -14,12 +14,12 @@ keep_chroms_file: ""
 keep_std_chroms: True 
 
 # Ignored if 'keep_chroms_file' is set. Comma-separated string; use "" if no chromosomes to remove.
-rm_chroms: "chrM" 
+rm_chroms: "" 
 
 # Alignment filtering options. Duplicates are marked, so one could filter out duplicates using SAM flags.
-samtools_mapq: 20
-samtools_keep_flags: ""
-samtools_omit_flags: ""
+samtools_mapq: 20 # for -q argument in samtools view
+samtools_keep_flags: "" # for -f argument in samtools view
+samtools_omit_flags: "1024" # for -F argument in samtools view; use 1024 to remove duplicates
 
 macs3:
   species: "hs"
@@ -38,7 +38,7 @@ csaw:
   run: True
   norm_type: "bkgd" # options are "bkgd" "hiAbund"
   peak_type: "macs3_narrow"
-  win_width: 150 # for TFs use 10-20bp
+  win_width: [150,20] # The first window size listed will be used for Bigwig normalizations; for TFs use 10-20bp
 
 chipseeker_params:
   orgdb: "org.Hs.eg.db"
