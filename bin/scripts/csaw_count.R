@@ -64,6 +64,7 @@ stopifnot(length(meta$sample) == length(unique(meta$sample)))
 
 # Set params for reading in BAM files
 param <- readParam(pe="both")
+param
 
 # Eliminate composition biases
 # TMM on binned counts
