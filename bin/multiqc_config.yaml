@@ -1,4 +1,6 @@
 custom_logo: "images/VAI_2_Line_White.png"
+custom_logo_url: "https://www.vai.org/"
+custom_logo_title: "Van Andel Institute"
 
 top_modules:
     - fastqc:

@@ -62,7 +62,7 @@ rule all:
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
         expand("analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", width=csaw_win_sizes, enriched_factor=enriched_factors, peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else [],
-        expand("analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}.pdf", enriched_factor=enriched_factors, peak_type=peak_types),
+        expand("analysis/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}.pdf", scale_method=bigwig_norms, enriched_factor=enriched_factors, peak_type=peak_types),
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -525,14 +525,15 @@ rule generate_bw:
 
         """
 
+
 rule avg_bigwigs:
     input:
-        lambda wildcards: expand("analysis/bigwig_files/{scale_method}/{sample}.bw", sample=samples[samples['sample_group']==wildcards.group]['sample'], scale_method=wildcards.scale_method)
+        bw=lambda wildcards: expand("analysis/bigwig_files/{scale_method}/{sample}.bw", sample=samples[samples['sample_group']==wildcards.group]['sample'].values, scale_method=wildcards.scale_method)
     output:
-        bw="analysis/avg_bigwigs/{group}.{scale_method}.bw"
+        bw="analysis/avg_bigwigs/{scale_method}/{group}.bw"
     params:
     benchmark:
-        "benchmarks/avg_bigwigs/{group}.{scale_method}.txt"
+        "benchmarks/avg_bigwigs/{scale_method}/{group}.txt"
     envmodules:
         config['modules']['deeptools']
     threads: 8
@@ -542,19 +543,19 @@ rule avg_bigwigs:
         log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
     shell:
         """
-        bigwigAverage -b {input} --binSize 1 -p {threads} -o {output.bw} -of "bigwig"
+        bigwigAverage -b {input.bw} --binSize 1 -p {threads} -o {output.bw} -of "bigwig"
         """
 
 rule deeptools_heatmap_peaks:
     input:
-        bw=lambda wildcards: expand("analysis/avg_bigwigs/{sample_group}.bw", sample_group=pd.unique(samples[samples['enriched_factor']==wildcards.enriched_factor]["sample_group"])),
+        bw=lambda wildcards: expand("analysis/avg_bigwigs/{{scale_method}}/{sample_group}.bw", sample_group=pd.unique(samples_no_controls[samples_no_controls['enriched_factor']==wildcards.enriched_factor]["sample_group"])),
         peaks="analysis/{peak_type}/merged_{enriched_factor}/all.bed",
     output:
-        compmat="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}_compmat.gz",
-        sorted_regions="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}_sorted_regions.bed",
-        heatmap="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}.pdf"
+        compmat="analysis/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}_compmat.gz",
+        sorted_regions="analysis/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}_sorted_regions.bed",
+        heatmap="analysis/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}.pdf"
     benchmark:
-        "benchmarks/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}.txt"
+        "benchmarks/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}.txt"
     envmodules:
         config['modules']['deeptools']
     params:
@@ -562,7 +563,7 @@ rule deeptools_heatmap_peaks:
         before="2000",
         binsize=10,
         samp_labels=lambda wildcards, input: " ".join(os.path.basename(x).replace(".bw", "") for x in input.bw),
-        temp="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}_tmp",
+        temp="analysis/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}_tmp",
         yaxislabel='"Normalized coverage"',
     threads: 16
     resources:
@@ -899,8 +900,29 @@ rule make_mqc_sample_filters:
     script:
         "bin/scripts/make_mqc_sample_filters.R"
 
+rule make_mqc_config:
+    input:
+        "bin/multiqc_config.yaml",
+    output:
+        "analysis/misc/mqc_config.yaml"
+    benchmark:
+        "benchmarks/make_mqc_config/bench.txt"
+    params:
+        wd=snakemake_dir
+    envmodules:
+    threads: 1
+    resources:
+        mem_gb=8,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    shell:
+        """
+        cp {input} {output}
+        perl -i -lnpe 's:images/VAI_2_Line_White.png:{params.wd}images/VAI_2_Line_White.png:' {output}
+        """
+
 rule multiqc:
     input:
+        mqc_config="analysis/misc/mqc_config.yaml",
         sample_filters="analysis/misc/mqc_sample_filters.tsv",
         mqc_dirs=expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()) +
             expand("analysis/fastqc/{sample.sample}_R2_fastqc.html", sample=samples.itertuples()) +
@@ -935,7 +957,7 @@ rule multiqc:
         multiqc \
         --force \
         --sample-filters {input.sample_filters} \
-        --config bin/multiqc_config.yaml \
+        --config {input.mqc_config} \
         --outdir {params.workdir} \
         --filename {params.outfile} \
         {params.dirs} {output.mqc_vers}
