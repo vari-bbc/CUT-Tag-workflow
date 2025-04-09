@@ -37,6 +37,7 @@ controls_list = list(itertools.chain.from_iterable( [x.split(',') for x in sampl
 samples_no_controls = samples[-samples['sample'].isin(controls_list)].copy()
 samples_no_controls["enriched_factor"] = samples_no_controls["enriched_factor"].fillna("peaks")
 sample_groups = pd.unique(samples_no_controls['sample_group']).tolist()
+enriched_factors = pd.unique(samples_no_controls['enriched_factor']).tolist()
 
 snakemake_dir = os.getcwd() + "/"
 
@@ -60,7 +61,8 @@ rule all:
         expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples_no_controls.itertuples(), norm_method = [k for k in bigwig_norms if 'csaw' in k]),
         expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
         expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
-        expand("analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", width=csaw_win_sizes, enriched_factor=pd.unique(samples_no_controls['enriched_factor']), peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else []
+        expand("analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", width=csaw_win_sizes, enriched_factor=enriched_factors, peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else [],
+        expand("analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}.pdf", enriched_factor=enriched_factors, peak_type=peak_types),
 
 def get_orig_fastq(wildcards):
     if wildcards.read == "R1":
@@ -523,6 +525,78 @@ rule generate_bw:
 
         """
 
+rule avg_bigwigs:
+    input:
+        lambda wildcards: expand("analysis/bigwig_files/{scale_method}/{sample}.bw", sample=samples[samples['sample_group']==wildcards.group]['sample'], scale_method=wildcards.scale_method)
+    output:
+        bw="analysis/avg_bigwigs/{group}.{scale_method}.bw"
+    params:
+    benchmark:
+        "benchmarks/avg_bigwigs/{group}.{scale_method}.txt"
+    envmodules:
+        config['modules']['deeptools']
+    threads: 8
+    resources:
+        nodes = 1,
+        mem_gb = 72,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    shell:
+        """
+        bigwigAverage -b {input} --binSize 1 -p {threads} -o {output.bw} -of "bigwig"
+        """
+
+rule deeptools_heatmap_peaks:
+    input:
+        bw=lambda wildcards: expand("analysis/avg_bigwigs/{sample_group}.bw", sample_group=pd.unique(samples[samples['enriched_factor']==wildcards.enriched_factor]["sample_group"])),
+        peaks="analysis/{peak_type}/merged_{enriched_factor}/all.bed",
+    output:
+        compmat="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}_compmat.gz",
+        sorted_regions="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}_sorted_regions.bed",
+        heatmap="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}.pdf"
+    benchmark:
+        "benchmarks/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}.txt"
+    envmodules:
+        config['modules']['deeptools']
+    params:
+        after="2000",
+        before="2000",
+        binsize=10,
+        samp_labels=lambda wildcards, input: " ".join(os.path.basename(x).replace(".bw", "") for x in input.bw),
+        temp="analysis/deeptools_heatmap_peaks/{enriched_factor}__{peak_type}_tmp",
+        yaxislabel='"Normalized coverage"',
+    threads: 16
+    resources:
+        mem_gb=100,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    shell:
+        """
+        export TMPDIR={params.temp}
+
+        computeMatrix \
+        scale-regions \
+        -p {threads} \
+        -b {params.before} \
+        -a {params.after} \
+        --samplesLabel {params.samp_labels} \
+        --binSize {params.binsize} \
+        -R {input.peaks} \
+        -S {input.bw} \
+        -o {output.compmat} 
+
+        echo "END computeMatrix"
+        echo "END computeMatrix" 1>&2
+
+        plotHeatmap \
+        --heatmapWidth 6 \
+        --yAxisLabel {params.yaxislabel} \
+        -m {output.compmat} \
+        -out {output.heatmap} \
+        --outFileSortedRegions {output.sorted_regions}
+
+        echo "END plotHeatmap"
+        echo "END plotHeatmap" 1>&2
+
+        """
 
 def get_macs3_bams(wildcards):
     macs3_bams = { 'trt': "analysis/bowtie2_filt/{sample}.sorted.bam".format(sample=wildcards.sample) }
@@ -807,18 +881,37 @@ rule csaw_summary:
         Rscript --vanilla -e "rmarkdown::render('{params.rmd}', params = list(out_res = '{params.out_res}', fdr_th = '{params.fdr_th}', edgeR_rds = '{params.edgeR_rds}', peaks_res_rds = '{params.peaks_res_rds}', combined_rds = '{params.combined_rds}', figdir = '{params.figdir}'))"
         """
 
+rule make_mqc_sample_filters:
+    input:
+        samplesheet=samplesheet
+    output:
+        sample_filts="analysis/misc/mqc_sample_filters.tsv"
+    benchmark:
+        "benchmarks/make_mqc_sample_filters/bench.txt"
+    params:
+        noncontrol_samples=','.join(samples_no_controls['sample'].values)
+    envmodules:
+        config['modules']['R']
+    threads: 1
+    resources:
+        mem_gb=8,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    script:
+        "bin/scripts/make_mqc_sample_filters.R"
+
 rule multiqc:
     input:
-        expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()),
-        expand("analysis/fastqc/{sample.sample}_R2_fastqc.html", sample=samples.itertuples()),
-        expand("analysis/trim_galore/{sample.sample}_R{read}_val_{read}_fastqc.html", sample=samples.itertuples(), read=["1","2"]),
-        expand("analysis/{align_dir}/idxstats/{sample.sample}.idxstats", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
-        expand("analysis/{align_dir}/flagstat/{sample.sample}.flagstat", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
-        expand("analysis/{align_dir}/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
-        expand("analysis/{align_dir}/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
-        expand("analysis/{align_dir}/qualimap/{sample.sample}/done", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']),
-        expand("analysis/macs3_narrow/{sample.sample}_peaks.xls", sample=samples.itertuples()),
-        expand("analysis/frags_over_peaks/{peak_type}_frip.csv", peak_type = ['all','group'])
+        sample_filters="analysis/misc/mqc_sample_filters.tsv",
+        mqc_dirs=expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()) +
+            expand("analysis/fastqc/{sample.sample}_R2_fastqc.html", sample=samples.itertuples()) +
+            expand("analysis/trim_galore/{sample.sample}_R{read}_val_{read}_fastqc.html", sample=samples.itertuples(), read=["1","2"]) +
+            expand("analysis/{align_dir}/idxstats/{sample.sample}.idxstats", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
+            expand("analysis/{align_dir}/flagstat/{sample.sample}.flagstat", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
+            expand("analysis/{align_dir}/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
+            expand("analysis/{align_dir}/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
+            expand("analysis/{align_dir}/qualimap/{sample.sample}/done", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
+            expand("analysis/macs3_narrow/{sample.sample}_peaks.xls", sample=samples.itertuples()) +
+            expand("analysis/frags_over_peaks/{peak_type}_frip.csv", peak_type = ['all','group'])
     output:
         mqc_vers="analysis/multiqc/all_mqc_versions.yaml",
         mqc="analysis/multiqc/multiqc_report.html",
@@ -827,7 +920,7 @@ rule multiqc:
     params:
         config_file=configfile_path,
         workdir="analysis/multiqc/",
-        dirs=lambda wildcards,input: " ".join(pd.unique([os.path.dirname(x) for x in input])),
+        dirs=lambda wildcards,input: " ".join(pd.unique([os.path.dirname(x) for x in input.mqc_dirs])),
         outfile="multiqc_report"
     envmodules:
         config['modules']['multiqc']
@@ -841,9 +934,10 @@ rule multiqc:
 
         multiqc \
         --force \
-        --config bin/multiqc_config2.yaml \
+        --sample-filters {input.sample_filters} \
+        --config bin/multiqc_config.yaml \
         --outdir {params.workdir} \
         --filename {params.outfile} \
-        {params.dirs} analysis/multiqc/all_mqc_versions.yaml
+        {params.dirs} {output.mqc_vers}
 
         """

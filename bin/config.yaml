@@ -14,7 +14,7 @@ keep_chroms_file: ""
 keep_std_chroms: True 
 
 # Ignored if 'keep_chroms_file' is set. Comma-separated string; use "" if no chromosomes to remove.
-rm_chroms: "" 
+rm_chroms: "chrM" 
 
 # Alignment filtering options. Duplicates are marked, so one could filter out duplicates using SAM flags.
 samtools_mapq: 20 # for -q argument in samtools view
@@ -51,7 +51,7 @@ cleanup_big_files:
   unfilt_namesorted_bams: True
   unfilt_coordsorted_bams: True
   filt_namesorted_bams: True
-  filt_coordsorted_bams: True
+  filt_coordsorted_bams: False
 
 modules:
   cutadapt: bbc2/cutadapt/cutadapt-4.3
@@ -70,3 +70,4 @@ modules:
   R: bbc2/R/alt/R-4.4.2-setR_LIBS_USER-extra
   pandoc: bbc2/pandoc/pandoc-3.1.2
   qualimap: bbc2/qualimap/qualimap_v.2.2.2
+  deeptools: bbc2/deeptools/deeptools-3.5.2

@@ -1,3 +1,5 @@
+custom_logo: "images/VAI_2_Line_White.png"
+
 top_modules:
     - fastqc:
         name: 'FastQC (raw)'
@@ -13,31 +15,100 @@ top_modules:
     - samtools:
         name: 'Samtools (pre-filtering)'
         path_filters:
-            - '*/bwamem/*'
+            - '*/bowtie2/*'
     - samtools:
         name: 'Samtools (post-filtering)'
-        info: 'Samtools after removing ChrM and retaining only mapped, primary, properly paired alignments.'
+        info: 'Samtools after filtering'
         target: ''
         path_filters:
-            - '*/filt_bams/*'
-    - samtools:
-        name: 'Samtools (post-filtering and deduped)'
-        info: 'Samtools after removing ChrM and retaining only mapped, primary, properly paired alignments and deduped.'
-        target: ''
-        path_filters:
-            - '*/dedup_bams/*'
+            - '*/bowtie2_filt/*'
     - picard:
         name: 'Picard (pre-filtering)'
         info: 'Picard metrics; Recall that Picard removes duplicates by default for insert size distribution.'
         path_filters:
-            - '*/bwamem/*'
+            - '*/bowtie2/*'
     - picard:
         name: 'Picard (post-filtering)'
-        info: 'Picard metrics after removing ChrM and retaining only mapped, primary, properly paired alignments. Recall that Picard removes duplicates by default for insert size distribution.'
+        info: 'Picard metrics after filtering'
         target: ''
         path_filters:
-            - '*/filt_bams/*'
+            - '*/bowtie2_filt/*'
+    - qualimap:
+        name: 'Qualimap (pre-filtering)'
+        path_filters:
+            - '*/bowtie2/*'
+    - qualimap:
+        name: 'Qualimap (post-filtering)'
+        info: 'Qualimap after filtering'
+        target: ''
+        path_filters:
+            - '*/bowtie2_filt/*'
+
+table_columns_visible:
+  "FastQC (raw)":
+    fastqc_raw-percent_duplicates: False
+    fastqc_raw-percent_gc: False
+    fastqc_raw-median_sequence_length: True
+  "FastQC (trimmed)":    
+    fastqc_trimmed-percent_duplicates: False
+    fastqc_trimmed-percent_gc: False
+  "Samtools (pre-filtering): flagstat":
+    samtools_post_filtering_flagstat-mapped_passed: False
+  "Samtools (post-filtering): flagstat":
+    samtools_post_filtering_flagstat-mapped_passed: False
+  "Picard (pre-filtering): InsertSizeMetrics":
+    picard_pre_filtering_insertsizemetrics-summed_median: False
+  "Picard (post-filtering): InsertSizeMetrics":
+    picard_post_filtering_insertsizemetrics-summed_median: False
+  "Qualimap (pre-filtering): BamQC":
+    qualimap_pre_filtering_bamqc-avg_gc: False
+    qualimap_pre_filtering_bamqc-median_insert_size: False
+    qualimap_pre_filtering_bamqc-median_coverage: False
+    qualimap_pre_filtering_bamqc-mean_coverage: False
+  "Qualimap (post-filtering): BamQC":
+    qualimap_post_filtering_bamqc-avg_gc: False
+    qualimap_post_filtering_bamqc-median_insert_size: False
+    qualimap_post_filtering_bamqc-median_coverage: False
+    qualimap_post_filtering_bamqc-mean_coverage: False
+  MACS2:
+    macs2-d: False
+
+
 extra_fn_clean_trim:
-     - "_filt_alns"
      - "_val_1"
      - "_val_2"
+
+# Other MultiQC config stuff here
+custom_data:
+  all_frip:
+    parent_id: "FRiP"
+    parent_name: "FRiP"
+    parent_description: "This section contains subsections for FRiP based on:\n1. Peaks merged across all samples.\n2. Peaks merged over the samples within each respective experimental group.\nChoose which peak type (e.g. MACS3 narrow vs broad) to use in the config file."
+    file_format: "csv"
+    section_name: "All FRiP"
+    description: "Calculate FRiP scores using peaks merged across all samples. Set peak type in config file."
+    plot_type: "bargraph"
+    pconfig:
+      id: "FRiP_barplot"
+      title: "FRiP"
+      ylab: "FRiP"
+      cpswitch_c_active: False
+      sort_samples: False
+  group_frip:
+    parent_id: "FRiP"
+    file_format: "csv"
+    section_name: "Group FRiP"
+    description: "Calculate FRiP scores using peaks merged across experimental group. Set peak type in config file."
+    plot_type: "bargraph"
+    pconfig:
+      id: "FRiP_barplot"
+      title: "FRiP"
+      ylab: "FRiP"
+      cpswitch_c_active: False
+      sort_samples: False
+sp:
+  all_frip:
+    fn: "all_frip.csv"
+  group_frip:
+    fn: "group_frip.csv"
+
