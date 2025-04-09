@@ -574,7 +574,8 @@ rule deeptools_heatmap_peaks:
         export TMPDIR={params.temp}
 
         computeMatrix \
-        scale-regions \
+        reference-point \
+        --referencePoint "center" \
         -p {threads} \
         -b {params.before} \
         -a {params.after} \
@@ -590,6 +591,9 @@ rule deeptools_heatmap_peaks:
         plotHeatmap \
         --heatmapWidth 6 \
         --yAxisLabel {params.yaxislabel} \
+        --xAxisLabel "" \
+        --refPointLabel "Peak center" \
+        --regionsLabel "Peaks" \
         -m {output.compmat} \
         -out {output.heatmap} \
         --outFileSortedRegions {output.sorted_regions}
