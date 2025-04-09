@@ -2,6 +2,10 @@ custom_logo: "images/VAI_2_Line_Black_with_Blue.png"
 custom_logo_url: "https://www.vai.org/"
 custom_logo_title: "Van Andel Institute"
 
+report_header_info:
+  - Author: "Bioinformatics and Biostatistics Core"
+  - Workflow repo: "https://github.com/vari-bbc/CUT-Tag-workflow"
+
 top_modules:
     - fastqc:
         name: 'FastQC (raw)'
