@@ -155,7 +155,6 @@ rule bowtie2:
         R2_trimmed="analysis/trim_galore/{sample}_R2_val_2.fq.gz"   
     output:
         sorted_bam=temp("analysis/bowtie2/{sample}.sorted.bam") if config['cleanup_big_files']['unfilt_coordsorted_bams'] else "analysis/bowtie2/{sample}.sorted.bam",
-        unsorted_bam=temp("analysis/bowtie2/{sample}.bam") if config['cleanup_big_files']['unfilt_namesorted_bams'] else "analysis/bowtie2/{sample}.bam",
         outbai="analysis/bowtie2/{sample}.sorted.bam.bai",
     benchmark:
         "benchmarks/bowtie2/{sample}.txt"
@@ -174,12 +173,8 @@ rule bowtie2:
         bowtie2 -p {threads} --very-sensitive-local --soft-clipped-unmapped-tlen --no-mixed --no-discordant --dovetail --phred33 \
         -I 10 -X 1000 -x {params.bt2_index} -1 {input.R1_trimmed} -2 {input.R2_trimmed} | \
         samblaster | \
-        samtools view -bS \
-        -@ {threads} \
-        -O "BAM" \
-        -o {output.unsorted_bam} 
+        samtools sort -m 6G -O "bam" -@ {threads} -o {output.sorted_bam} -
         
-        samtools sort -m 6G -O "bam" -@ {threads} -o {output.sorted_bam} {output.unsorted_bam}
         samtools index -@ {threads} {output.sorted_bam}
 
         """
@@ -253,7 +248,7 @@ rule filter_bams:
     output:
         sorted_bam=temp("analysis/{align_dirname}_filt/{bam_name}.sorted.bam") if config['cleanup_big_files']['filt_coordsorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
         sorted_bai="analysis/{align_dirname}_filt/{bam_name}.sorted.bam.bai",
-        bam=temp("analysis/{align_dirname}_filt/{bam_name}.bam") if config['cleanup_big_files']['filt_namesorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.bam",
+        bam=temp("analysis/{align_dirname}_filt/{bam_name}.bam") if config['cleanup_big_files']['filt_namecollated_bams'] else "analysis/{align_dirname}_filt/{bam_name}.bam",
     params:
         view_mapq="" if config['samtools_mapq'] == "" else "-q {mapq}".format(mapq=config['samtools_mapq']),
         view_keep="" if config['samtools_keep_flags'] == "" else "-f {flag}".format(flag=config['samtools_keep_flags']),
@@ -269,11 +264,11 @@ rule filter_bams:
     shell:
         """
         samtools view -@ {threads} -u --region-file {input.keep_regions} {params.view_mapq} {params.view_keep} {params.view_omit} {input.bam} | \
-        samtools sort -@ {threads} -n -u - | \
+        samtools collate -@ {threads} -O -u - | \
         samtools fixmate -@ {threads} -u - - | \
-        samtools view -@ {threads} -f 2 -o {output.bam} -
+        samtools view -@ {threads} -f 2 -b -u - | tee {output.bam} | \
+        samtools sort -m 6G -@ {threads} -o {output.sorted_bam} -
 
-        samtools sort -@ {threads} -o {output.sorted_bam} {output.bam}
         samtools index -@ {threads} {output.sorted_bam}
 
         """
