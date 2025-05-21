@@ -82,7 +82,7 @@ if (norm_type == "bkgd"){
     filt$norm.factors <- binned$norm.factors
 } else if (norm_type == "hiAbund"){
     # do nothing; the norm_factors in 'filt' are already high abundance window normalization factors
-    stopifnot("norm.factors" %in% colnames(filt))
+    stopifnot("norm.factors" %in% colnames(colData(filt)))
 } else {
     stop("Invalid norm_type")
 }
