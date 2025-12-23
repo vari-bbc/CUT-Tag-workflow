@@ -83,9 +83,9 @@ def get_scale_factor_file(wildcards):
     if (wildcards.sample in samples_no_controls['sample'].values):
         curr_enriched = samples_no_controls[samples_no_controls['sample']==wildcards.sample]['enriched_factor'].values[0]
     if (wildcards.scale_method == "csaw_bkgd"):
-        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd_endogenous.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "csaw_hiAbund"):
-        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund_endogenous.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "baseCov"):
         return "analysis/bigwig_norm_factors/base_cov_scale_factors.tsv"
     else:
