@@ -76,7 +76,7 @@ rule get_keep_chrom_names:
 def get_keep_regions (wildcards):
     cmd = ""
     if config['ref']['blacklist'] == "":
-        cmd = "perl -F/\t/ -lane qq|print $F[0]\t0\t$F[1]\n|" + config['ref']['fai']
+        cmd = "perl -F'\\t' -lane 'print qq:$F[0]\\t0\\t$F[1]:' " + config['ref']['fai']
     else:
         cmd = "bedtools sort -i " + config['ref']['blacklist'] + " -g " + config['ref']['fai'] + " | bedtools complement -i 'stdin' -g " + config['ref']['fai']
 
