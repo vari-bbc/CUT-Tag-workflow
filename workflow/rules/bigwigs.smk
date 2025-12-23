@@ -100,20 +100,39 @@ def get_bigwig_norm_factor(wildcards, input):
     scalefactor = df[df['sample']==wildcards.sample]['final.factors'].values[0]
     return str(scalefactor)
 
+rule make_genome_file:
+    input:
+        fai=config['ref']['fai'],
+    output:
+        genome="analysis/misc/chroms.genome"
+    benchmark:
+        "benchmarks/make_genome_file/bench.txt"
+    envmodules:
+    params:
+    threads: 4
+    resources:
+        mem_gb = 64,
+        log_prefix="log"
+    shell:
+        """
+        cut -f1,2 {input.fai} > {output.genome}
+
+        """
+
 rule generate_bw:
     input:
         gzip_bed="analysis/bed_files/{sample}.bed.gz",
-        scale_factor=get_scale_factor_file
+        scale_factor=get_scale_factor_file,
+        genome="analysis/misc/chroms.genome",
     output:
         bw_file="analysis/bigwig_files/{scale_method}/{sample}.bw",
-        bedgraph=temp("analysis/bigwig_files/{scale_method}/{sample}.bedgraph")
+        bedgraph="analysis/bigwig_files/{scale_method}/{sample}.bedgraph"
     benchmark:
         "benchmarks/bigwig_files/{scale_method}/{sample}.txt"
     envmodules:
         config['modules']['bedtools'],
         config['modules']['ucsc']
     params:
-        chr_len=config['ref']['fai'],
         scale_factor=get_bigwig_norm_factor,
     threads: 4
     resources:
@@ -124,10 +143,10 @@ rule generate_bw:
         scaling_factor="{params.scale_factor}"
         echo "Scaling Factor: $scaling_factor"
 
-        zcat {input.gzip_bed} | bedtools genomecov -bg -i stdin -g {params.chr_len} -scale $scaling_factor > {output.bedgraph}
+        zcat {input.gzip_bed} | bedtools genomecov -bg -i stdin -g {input.genome} -scale $scaling_factor | sort -k1,1 -k2,2n > {output.bedgraph}
         echo "Bedgraph file created: {output.bedgraph}"
 
-        bedGraphToBigWig {output.bedgraph} {params.chr_len} {output.bw_file}
+        bedGraphToBigWig {output.bedgraph} {input.genome} {output.bw_file}
         echo "BigWig file created: {output.bw_file}"
 
         """
@@ -150,5 +169,5 @@ rule avg_bigwigs:
         log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
     shell:
         """
-        bigwigAverage -b {input.bw} --binSize 1 -p {threads} -o {output.bw} -of "bigwig"
+        bigwigAverage -b {input.bw} --binSize 10 -p {threads} -o {output.bw} -of "bigwig"
         """
