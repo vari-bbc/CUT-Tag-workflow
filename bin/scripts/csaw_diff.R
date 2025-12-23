@@ -17,6 +17,9 @@ bp_cores <- snakemake@threads-1
 contrasts_file <- snakemake@input[['contrasts']]
 filt <- snakemake@input[['filt_small_wins']]
 binned <- snakemake@input[['bin_counts']]
+filt.spikein <- snakemake@input[['filt_small_wins_spikein']]
+binned.spikein <- snakemake@input[['bin_counts_spikein']]
+
 peaks <- snakemake@input[['merged_peaks']]
 norm_type <- snakemake@wildcards[['norm_type']]
 enriched_factor <- snakemake@wildcards[['enriched_factor']]
@@ -57,7 +60,8 @@ suppressPackageStartupMessages(library(orgdb_pkg, character.only = TRUE))
 suppressPackageStartupMessages(library(txdb_pkg, character.only = TRUE))
 
 filt <- readRDS(filt)
-binned <- readRDS(binned)
+#binned <- readRDS(binned)
+
 contrasts <- read_tsv(contrasts_file)
 contrasts <- contrasts %>%
     dplyr::filter(group1 %in% filt$sample_group & group2 %in% filt$sample_group) %>%
@@ -78,11 +82,28 @@ peaks <- as.GRanges(do.call(annotatePeak, chipseeker_args))
 write_rds(peaks, peaks_anno_rds)
 
 if (norm_type == "bkgd"){
+
+    binned <- readRDS(binned)
     stopifnot(identical(colnames(filt), colnames(binned)))
     filt$norm.factors <- binned$norm.factors
+
+} else if (norm_type == "bkgd.spikein"){
+
+    binned.spikein <- readRDS(binned.spikein)
+    stopifnot(identical(colnames(filt), colnames(binned.spikein)))
+    filt$norm.factors <- binned.spikein$norm.factors
+
+} else if (norm_type == "hiAbund.spikein"){
+
+    filt.spikein <- readRDS(filt.spikein)
+    stopifnot(identical(colnames(filt), colnames(filt.spikein)))
+    filt$norm.factors <- filt.spikein$norm.factors
+
 } else if (norm_type == "hiAbund"){
+
     # do nothing; the norm_factors in 'filt' are already high abundance window normalization factors
     stopifnot("norm.factors" %in% colnames(colData(filt)))
+    
 } else {
     stop("Invalid norm_type")
 }

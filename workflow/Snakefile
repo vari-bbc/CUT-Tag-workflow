@@ -1,0 +1,91 @@
+import pandas as pd
+import numpy as np
+import os
+import re
+import itertools
+from pathlib import Path
+from snakemake.utils import validate, min_version
+##### set minimum snakemake version #####
+min_version("7.25.0")
+
+##### Editable variables #####
+
+configfile_path = "bin/config.yaml"
+configfile: configfile_path
+
+bt2_index = config['ref']['index']
+
+##### load config and sample sheets #####
+samplesheet="bin/samples.tsv"
+units = pd.read_table(samplesheet, dtype={"sample" : str, "sample_group" : str })
+
+validate(units, "../schema/samplesheet.yaml")
+
+contrasts_file="bin/contrasts.tsv"
+contrasts = pd.read_table(contrasts_file, dtype={"group1" : str, "group2" : str , "enriched_factor" : str})
+validate(contrasts, "../schema/contrasts.yaml")
+
+samples = units[["sample","control","sample_group","enriched_factor"]].drop_duplicates()
+if not samples['sample'].is_unique:
+    raise Exception('A sample has more than one combination of control, sample_group, enriched_factor.')
+
+sample_grps_df = units[["sample_group","enriched_factor"]].drop_duplicates()
+if not sample_grps_df['sample_group'].is_unique:
+    raise Exception('Sample group must be unique across enriched_factor levels.')
+
+# Filter for sample rows that are not controls
+controls_list = list(itertools.chain.from_iterable( [x.split(',') for x in samples['control'].values if not pd.isnull(x)] ))
+samples_no_controls = samples[-samples['sample'].isin(controls_list)].copy()
+samples_no_controls["enriched_factor"] = samples_no_controls["enriched_factor"].fillna("peaks")
+sample_groups = pd.unique(samples_no_controls['sample_group']).tolist()
+enriched_factors = pd.unique(samples_no_controls['enriched_factor']).tolist()
+
+snakemake_dir = os.getcwd() + "/"
+
+# make a tmp directory for analyses
+tmp_dir = os.path.join(snakemake_dir, "tmp")
+if not os.path.exists(tmp_dir):
+    os.mkdir(tmp_dir)
+
+peak_types = ['macs3_narrow']
+peak_types = peak_types + ["macs3_broad"] if config['macs3']['run_broad'] else peak_types
+
+bigwig_norms = ['baseCov']
+bigwig_norms = bigwig_norms + config['addtnl_bigwig_norms'] if isinstance(config['addtnl_bigwig_norms'], list) else bigwig_norms
+
+csaw_win_sizes = config['csaw']['win_width']
+
+ref_fai = config['ref']['fai']
+fai_parsed = pd.read_table(ref_fai, names=['chr','len','offset','bases_per_line','bytes_per_line'])
+chrom_files = [config['keep_chroms_file'], config['spikein_chroms_file']]
+for chrom_file in chrom_files:
+    if (Path(chrom_file).is_file):
+        num_lines = sum(1 for _ in open(chrom_file))
+        if num_lines != 1:
+            raise Exception(f"{chrom_file} should have only one line.")
+
+        curr_chroms = open(chrom_file).readline().rstrip().split(' ')
+
+        if any([x not in fai_parsed['chr'].values for x in curr_chroms]):
+            raise Exception(f"Not all chromosomes in {chrom_file} found in the {ref_fai}.")
+
+
+include:
+    'rules/align.smk'
+include:
+    'rules/qc.smk'
+include:
+    'rules/bigwigs.smk'
+include:
+    'rules/peaks_and_counts.smk'
+
+rule all:
+    input:
+        "analysis/multiqc/multiqc_report.html",
+        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples.itertuples(), norm_method = [k for k in bigwig_norms if not 'csaw' in k]),
+        expand("analysis/bigwig_files/{norm_method}/{sample.sample}.bw", sample=samples_no_controls.itertuples(), norm_method = [k for k in bigwig_norms if 'csaw' in k]),
+        expand("analysis/macs3_narrow/{sample.sample}_summits.bed", sample=samples.itertuples()),
+        expand("analysis/macs3_broad/{sample.sample}_peaks.broadPeak", sample=samples.itertuples()) if config['macs3']['run_broad'] else [],
+        expand("analysis/csaw_win{width}/csaw_summary/{enriched_factor}__{peak_type}__{norm_type}/csaw_summary.html", width=csaw_win_sizes, enriched_factor=enriched_factors, peak_type = config['csaw']['peak_type'], norm_type = config['csaw']['norm_type']) if config['csaw']['run'] else [],
+        expand("analysis/deeptools_heatmap_peaks/{scale_method}/{enriched_factor}__{peak_type}.pdf", scale_method=bigwig_norms, enriched_factor=enriched_factors, peak_type=peak_types),
+

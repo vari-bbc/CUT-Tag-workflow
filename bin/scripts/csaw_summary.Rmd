@@ -128,7 +128,7 @@ patchwork::wrap_plots(
       scale_color_manual(breaks = levels(df$sig), values=c("red","black"), drop = FALSE) +
       theme(title = element_text(size=7))
   })
-) + plot_layout(ncol=fig_ncol, guides = "collect")
+) + plot_layout(ncol=min(c(fig_ncol, num_contrasts)), guides = "collect")
 
 
 ```
@@ -152,7 +152,7 @@ patchwork::wrap_plots(
       scale_color_manual(breaks = levels(df$sig), values=c("red","black"), drop = FALSE) +
       theme(title = element_text(size=7))
   })
-) + plot_layout(ncol=fig_ncol, guides = "collect")
+) + plot_layout(ncol=min(c(fig_ncol, num_contrasts)), guides = "collect")
 
 
 ```

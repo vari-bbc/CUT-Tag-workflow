@@ -18,6 +18,7 @@ top_modules:
         path_filters:
             - '*/trim_galore/*_fastqc.zip'
     - cutadapt
+    - samblaster
     - samtools:
         name: 'Samtools (pre-filtering)'
         path_filters:
@@ -27,7 +28,7 @@ top_modules:
         info: 'Samtools after filtering'
         target: ''
         path_filters:
-            - '*/bowtie2_filt/*'
+            - '*/bowtie2_filt_endogenous/*'
     - picard:
         name: 'Picard (pre-filtering)'
         info: 'Picard metrics; Recall that Picard removes duplicates by default for insert size distribution.'
@@ -38,17 +39,19 @@ top_modules:
         info: 'Picard metrics after filtering'
         target: ''
         path_filters:
-            - '*/bowtie2_filt/*'
+            - '*/bowtie2_filt_endogenous/*'
     - qualimap:
         name: 'Qualimap (pre-filtering)'
         path_filters:
             - '*/bowtie2/*'
+        path_filters_exclude:
+            - '*/bowtie2_filt_endogenous/*'
     - qualimap:
         name: 'Qualimap (post-filtering)'
         info: 'Qualimap after filtering'
         target: ''
         path_filters:
-            - '*/bowtie2_filt/*'
+            - '*/bowtie2_filt_endogenous/*'
 
 table_columns_visible:
   "FastQC (raw)":
@@ -58,10 +61,12 @@ table_columns_visible:
   "FastQC (trimmed)":    
     fastqc_trimmed-percent_duplicates: False
     fastqc_trimmed-percent_gc: False
+  "Samblaster":
+    samblaster-pct_dups: True
   "Samtools (pre-filtering): flagstat":
-    samtools_post_filtering_flagstat-mapped_passed: False
+    samtools_pre_filtering_flagstat-mapped_passed: True
   "Samtools (post-filtering): flagstat":
-    samtools_post_filtering_flagstat-mapped_passed: False
+    samtools_post_filtering_flagstat-mapped_passed: True
   "Picard (pre-filtering): InsertSizeMetrics":
     picard_pre_filtering_insertsizemetrics-summed_median: False
   "Picard (post-filtering): InsertSizeMetrics":
@@ -71,11 +76,17 @@ table_columns_visible:
     qualimap_pre_filtering_bamqc-median_insert_size: False
     qualimap_pre_filtering_bamqc-median_coverage: False
     qualimap_pre_filtering_bamqc-mean_coverage: False
+    qualimap_pre_filtering_bamqc-30_x_pc: False
+    qualimap_pre_filtering_bamqc-duplication_rate: False
   "Qualimap (post-filtering): BamQC":
     qualimap_post_filtering_bamqc-avg_gc: False
     qualimap_post_filtering_bamqc-median_insert_size: False
     qualimap_post_filtering_bamqc-median_coverage: False
     qualimap_post_filtering_bamqc-mean_coverage: False
+    qualimap_post_filtering_bamqc-percentage_aligned: False
+    qualimap_post_filtering_bamqc-30_x_pc: False
+    qualimap_post_filtering_bamqc-duplication_rate: False
+
   MACS2:
     macs2-d: False
 
