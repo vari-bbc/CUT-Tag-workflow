@@ -3,6 +3,7 @@ import numpy as np
 import os
 import re
 import itertools
+from pathlib import Path
 from snakemake.utils import validate, min_version
 ##### set minimum snakemake version #####
 min_version("7.25.0")
@@ -53,6 +54,21 @@ bigwig_norms = ['baseCov']
 bigwig_norms = bigwig_norms + config['addtnl_bigwig_norms'] if isinstance(config['addtnl_bigwig_norms'], list) else bigwig_norms
 
 csaw_win_sizes = config['csaw']['win_width']
+
+ref_fai = config['ref']['fai']
+fai_parsed = pd.read_table(ref_fai, names=['chr','len','offset','bases_per_line','bytes_per_line'])
+chrom_files = [config['keep_chroms_file'], config['spikein_chroms_file']]
+for chrom_file in chrom_files:
+    if (Path(chrom_file).is_file):
+        num_lines = sum(1 for _ in open(chrom_file))
+        if num_lines != 1:
+            raise Exception(f"{chrom_file} should have only one line.")
+
+        curr_chroms = open(chrom_file).readline().rstrip().split(' ')
+
+        if any([x not in fai_parsed['chr'].values for x in curr_chroms]):
+            raise Exception(f"Not all chromosomes in {chrom_file} found in the {ref_fai}.")
+
 
 include:
     'rules/align.smk'
