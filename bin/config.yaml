@@ -1,14 +1,14 @@
 # path or URL to sample sheet (TSV format, columns: sample, condition, ...)
 ref:
   # path/to/bowtie2 index
-  index:        /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/indexes/bowtie2/hg38_gencode
-  fai:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa.fai
-  sequence:  /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/sequence/hg38_gencode.fa
+  index:        /varidata/research/projects/bbc/versioned_references/2025-12-18_22.42.45_v22/data/mm10_gencode_plus_dm6/indexes/bowtie2/mm10_gencode_plus_dm6
+  fai:  /varidata/research/projects/bbc/versioned_references/2025-12-18_22.42.45_v22/data/mm10_gencode_plus_dm6/sequence/mm10_gencode_plus_dm6.fa.fai
+  sequence:  /varidata/research/projects/bbc/versioned_references/2025-12-18_22.42.45_v22/data/mm10_gencode_plus_dm6/sequence/mm10_gencode_plus_dm6.fa
   # if blacklist is provided, alignments will be filtered against these reions; set to "" if this is not desired or if blacklist is not available
-  blacklist: /varidata/research/projects/bbc/versioned_references/2024-10-31_10.56.03_v17/data/hg38_gencode/blacklist/hg38_encode_v3.bed 
+  blacklist: /varidata/research/projects/bbc/versioned_references/2025-12-18_22.42.45_v22/data/mm10_gencode/blacklist/mm10_encode_v2.bed  
 
-# OPTIONAL: space-delimited file (one line) containing the chromosomes to keep (e.g. the chromosomes, not the unplaced contigs)
-keep_chroms_file: ""
+# OPTIONAL: space-delimited file (one line) containing the chromosomes to keep (e.g. the chromosomes, not the unplaced contigs). Do not include spikein chroms.
+keep_chroms_file: "bin/keep_chroms.txt"
 
 # Ignored if 'keep_chroms_file' is set. If True, standard chromosomes will be 'guessed' using GenomeInfoDb::standardChromosomes.
 keep_std_chroms: True 
@@ -16,14 +16,17 @@ keep_std_chroms: True
 # Ignored if 'keep_chroms_file' is set. Comma-separated string; use "" if no chromosomes to remove.
 rm_chroms: "chrM" 
 
+# OPTIONAL: space-delimited file (one line) containing the spikein chromosomes. Specify "" if no spikeins.
+spikein_chroms_file: "bin/spikein_chroms.txt"
+
 # Alignment filtering options. Duplicates are marked, so one could filter out duplicates using SAM flags.
 samtools_mapq: 20 # for -q argument in samtools view
 samtools_keep_flags: "" # for -f argument in samtools view
 samtools_omit_flags: "1024" # for -F argument in samtools view; use 1024 to remove duplicates
 
 macs3:
-  species: "hs"
-  run_broad: True #False # set to True to run macs3 in broad mode also.
+  species: "mm"
+  run_broad: False # set to True to run macs3 in broad mode also.
 
 frip:
   peak_type: "macs3_narrow"
@@ -41,14 +44,14 @@ csaw:
   win_width: [150,20] # The first window size listed will be used for Bigwig normalizations; for TFs use 10-20bp
 
 chipseeker_params:
-  orgdb: "org.Hs.eg.db"
-  txdb: "TxDb.Hsapiens.UCSC.hg38.knownGene"
+  orgdb: "org.Mm.eg.db"
+  txdb: "TxDb.Mmusculus.UCSC.mm10.knownGene"
   promoter_start: -3000
   promoter_end: 500
 
 # Delete big intermediate files
 cleanup_big_files:
-  unfilt_coordsorted_bams: True
+  unfilt_coordsorted_bams: False
   filt_namecollated_bams: True
   filt_coordsorted_bams: False
 
