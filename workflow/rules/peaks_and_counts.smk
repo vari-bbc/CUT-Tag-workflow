@@ -233,7 +233,7 @@ rule frip:
         mem_gb=100,
         log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
     script:
-        "bin/scripts/calc_frip.R"
+        "../../bin/scripts/calc_frip.R"
 
 
 rule csaw_count:
@@ -262,7 +262,7 @@ rule csaw_count:
     envmodules:
         config['modules']['R']
     script:
-        "bin/scripts/csaw_count.R"
+        "../../bin/scripts/csaw_count.R"
 
 rule csaw_diff:
     input:
@@ -294,7 +294,7 @@ rule csaw_diff:
     envmodules:
         config['modules']['R']
     script:
-        "bin/scripts/csaw_diff.R"
+        "../../bin/scripts/csaw_diff.R"
 
 rule csaw_summary:
     input:

@@ -71,7 +71,7 @@ rule get_keep_chrom_names:
     envmodules:
         config['modules']['R']
     script:
-        "bin/scripts/get_keep_chrom_names.R"
+        "../../bin/scripts/get_keep_chrom_names.R"
 
 def get_keep_regions (wildcards):
     cmd = ""
@@ -120,9 +120,9 @@ rule filter_bams:
         bam = "analysis/{align_dirname}/{bam_name}.sorted.bam",
         keep_regions = "analysis/misc/keep_regions.bed"
     output:
-        sorted_bam=temp("analysis/{align_dirname}_filt_endogenous/{bam_name}.sorted.bam") if config['cleanup_big_files']['filt_coordsorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
+        sorted_bam=temp("analysis/{align_dirname}_filt_endogenous/{bam_name}.sorted.bam") if config['cleanup_big_files']['filt_coordsorted_bams'] else "analysis/{align_dirname}_filt_endogenous/{bam_name}.sorted.bam",
         sorted_bai="analysis/{align_dirname}_filt_endogenous/{bam_name}.sorted.bam.bai",
-        bam=temp("analysis/{align_dirname}_filt_endogenous/{bam_name}.bam") if config['cleanup_big_files']['filt_namecollated_bams'] else "analysis/{align_dirname}_filt/{bam_name}.bam",
+        bam=temp("analysis/{align_dirname}_filt_endogenous/{bam_name}.bam") if config['cleanup_big_files']['filt_namecollated_bams'] else "analysis/{align_dirname}_filt_endogenous/{bam_name}.bam",
     params:
         view_mapq="" if config['samtools_mapq'] == "" else "-q {mapq}".format(mapq=config['samtools_mapq']),
         view_keep="" if config['samtools_keep_flags'] == "" else "-f {flag}".format(flag=config['samtools_keep_flags']),

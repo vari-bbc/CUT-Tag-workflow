@@ -192,7 +192,7 @@ rule make_mqc_sample_filters:
         mem_gb=8,
         log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
     script:
-        "bin/scripts/make_mqc_sample_filters.R"
+        "../../bin/scripts/make_mqc_sample_filters.R"
 
 rule make_mqc_config:
     input:
