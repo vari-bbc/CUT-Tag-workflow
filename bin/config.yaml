@@ -41,7 +41,7 @@ addtnl_bigwig_norms:
 # Differential analysis
 csaw:
   run: True
-  norm_type: "bkgd" # options are "bkgd" "hiAbund"
+  norm_type: ["hiAbund","bkgd","hiAbund.spikein","bkgd.spikein"] # options are "bkgd" "hiAbund" "hiAbund.spikein" "bkgd.spikein"
   peak_type: "macs3_narrow"
   win_width: [150,20] # The first window size listed will be used for Bigwig normalizations; for TFs use 10-20bp
 

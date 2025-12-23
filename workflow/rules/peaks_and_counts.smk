@@ -268,6 +268,8 @@ rule csaw_diff:
     input:
         filt_small_wins="analysis/csaw_win{width}/csaw_count_endogenous/{enriched_factor}/filt_small_wins.rds",
         bin_counts="analysis/csaw_win{width}/csaw_count_endogenous/{enriched_factor}/binned.rds",
+        filt_small_wins_spikein="analysis/csaw_win{width}/csaw_count_spikein/{enriched_factor}/filt_small_wins.rds",
+        bin_counts_spikein="analysis/csaw_win{width}/csaw_count_spikein/{enriched_factor}/binned.rds",
         merged_peaks="analysis/{peak_type}/merged_{enriched_factor}/all.bed",
         contrasts="bin/contrasts.tsv"
     output:
