@@ -214,12 +214,38 @@ rule make_mqc_config:
         perl -i -lnpe 's:images/VAI_2_Line_White.png:{params.wd}images/VAI_2_Line_White.png:' {output}
         """
 
+rule fastq_screen:
+    """
+    Run fastq_screen to detect any contamination from other species or excessive rRNA.
+    """
+    input:
+        "analysis/renamed_data/{fq_pref}.fastq.gz"
+    output:
+        html = "analysis/fastq_screen/{fq_pref}_screen.html",
+        txt = "analysis/fastq_screen/{fq_pref}_screen.txt",
+    params:
+    benchmark:
+        "benchmarks/fastq_screen/{fq_pref}.txt"
+    envmodules:
+        config['modules']['fastq_screen']
+    threads: 8
+    resources:
+        mem_gb = 32,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        fastq_screen --threads {threads} --outdir analysis/fastq_screen/ {input}
+        """
+
+
 rule multiqc:
     input:
         mqc_config="analysis/misc/mqc_config.yaml",
         sample_filters="analysis/misc/mqc_sample_filters.tsv",
         mqc_dirs=expand("analysis/fastqc/{sample.sample}_R1_fastqc.html", sample=samples.itertuples()) +
             expand("analysis/fastqc/{sample.sample}_R2_fastqc.html", sample=samples.itertuples()) +
+            expand("analysis/fastq_screen/{sample.sample}_R1_screen.html", sample=samples.itertuples()) +
+            expand("analysis/fastq_screen/{sample.sample}_R2_screen.html", sample=samples.itertuples()) +
             expand("analysis/trim_galore/{sample.sample}_R{read}_val_{read}_fastqc.html", sample=samples.itertuples(), read=["1","2"]) +
             expand("analysis/{align_dir}/idxstats/{sample.sample}.idxstats", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
             expand("analysis/{align_dir}/flagstat/{sample.sample}.flagstat", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
