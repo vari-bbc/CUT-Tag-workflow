@@ -107,7 +107,7 @@ rule make_keep_regions_bed:
 
         for chr in $(cat {input.keep_chroms})
         do
-            grep -P "^$chr\t" {output.keep_regions_temp} >> {output.keep_regions} 
+            grep -P "^$chr\\t" {output.keep_regions_temp} >> {output.keep_regions} 
         done
 
         """
