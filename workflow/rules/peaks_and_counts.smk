@@ -239,19 +239,19 @@ rule frip:
 rule csaw_count:
     input:
         samplesheet=samplesheet,
-        bams = lambda wildcards: expand("analysis/bowtie2_filt_endogenous/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
+        bams = lambda wildcards: expand("analysis/bowtie2_filt_{{chromatin_source}}/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
     output:
-        binned="analysis/csaw_win{width}/csaw_count/{enriched_factor}/binned.rds",
-        small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/small_wins.rds",
-        filt_small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/filt_small_wins.rds",
-        global_filt="analysis/csaw_win{width}/csaw_count/{enriched_factor}/global_filt.rds",
-        bkgrd_scale="analysis/csaw_win{width}/csaw_count/{enriched_factor}/bkgrd_norm_factors.tsv",
-        hiAbund_scale="analysis/csaw_win{width}/csaw_count/{enriched_factor}/hiAbund_norm_factors.tsv",
-        bkgrd_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd.tsv",
-        hiAbund_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund.tsv",
-        figs_dir=directory("analysis/csaw_win{width}/csaw_count/{enriched_factor}/figures")
+        binned="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/binned.rds",
+        small_wins="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/small_wins.rds",
+        filt_small_wins="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/filt_small_wins.rds",
+        global_filt="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/global_filt.rds",
+        bkgrd_scale="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/bkgrd_norm_factors.tsv",
+        hiAbund_scale="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/hiAbund_norm_factors.tsv",
+        bkgrd_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd_{chromatin_source}.tsv",
+        hiAbund_scale_link="analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund_{chromatin_source}.tsv",
+        figs_dir=directory("analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/figures")
     benchmark:
-        "benchmarks/csaw_win{width}/csaw_count/{enriched_factor}.txt"
+        "benchmarks/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}.txt"
     params:
         window_width="{width}",
         samp_names=lambda wildcards, input: [os.path.basename(x).replace(".sorted.bam","") for x in input.bams],
@@ -266,8 +266,8 @@ rule csaw_count:
 
 rule csaw_diff:
     input:
-        filt_small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/filt_small_wins.rds",
-        bin_counts="analysis/csaw_win{width}/csaw_count/{enriched_factor}/binned.rds",
+        filt_small_wins="analysis/csaw_win{width}/csaw_count_endogenous/{enriched_factor}/filt_small_wins.rds",
+        bin_counts="analysis/csaw_win{width}/csaw_count_endogenous/{enriched_factor}/binned.rds",
         merged_peaks="analysis/{peak_type}/merged_{enriched_factor}/all.bed",
         contrasts="bin/contrasts.tsv"
     output:
