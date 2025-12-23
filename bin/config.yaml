@@ -35,6 +35,8 @@ frip:
 addtnl_bigwig_norms:
   - 'csaw_bkgd'
   - 'csaw_hiAbund'
+  - 'csaw.bkgd_spikein'
+  - 'csaw.hiAbund_spikein'
 
 # Differential analysis
 csaw:

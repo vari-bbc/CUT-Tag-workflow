@@ -88,6 +88,10 @@ def get_scale_factor_file(wildcards):
         return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund_endogenous.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "baseCov"):
         return "analysis/bigwig_norm_factors/base_cov_scale_factors.tsv"
+    elif (wildcards.scale_method == "csaw.bkgd_spikein"):
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd_spikein.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
+    elif (wildcards.scale_method == "csaw.hiAbund_spikein"):
+        return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund_spikein.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     else:
         raise Exception("Could not determine scale factors file name.")
 
