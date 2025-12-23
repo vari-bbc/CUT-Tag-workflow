@@ -146,3 +146,64 @@ rule filter_bams:
         samtools index -@ {threads} {output.sorted_bam}
 
         """
+
+
+rule get_spikein_chroms_bed:
+    input:
+        ref_fai=config["ref"]["fai"],
+        spikein_chroms = config['spikein_chroms_file']
+    output:
+        keep_fai=temp("analysis/misc/spikein_chroms.fai"),
+        keep_bed="analysis/misc/spikein_chroms.bed"
+    benchmark:
+        "benchmarks/get_spikein_chroms_bed/bench.txt"
+    params:
+    threads: 1
+    resources:
+        mem_gb=20,
+        log_prefix=lambda wildcards: "_".join(wildcards) if len(wildcards) > 0 else "log"
+    envmodules:
+    shell:
+        """
+        for chr in $(cat {input.spikein_chroms})
+        do
+            grep -P "^$chr\\t" {input.ref_fai} >> {output.keep_fai}
+        done
+
+        perl -lane 'print qq|$F[0]\\t0\\t$F[1]|' {output.keep_fai} > {output.keep_bed}
+        """
+
+rule filter_spikein_bams:
+    """
+    Filter BAMs for spikeins. After filters, fixmate will be run to update SAM flags for pairs where one mate is removed and then filtered for properly paired alignments
+    """
+    input:
+        bam = "analysis/{align_dirname}/{bam_name}.sorted.bam",
+        spikein_chroms = "analysis/misc/spikein_chroms.bed",
+    output:
+        sorted_bam="analysis/{align_dirname}_filt_spikein/{bam_name}.sorted.bam",
+        sorted_bai="analysis/{align_dirname}_filt_spikein/{bam_name}.sorted.bam.bai",
+        bam="analysis/{align_dirname}_filt_spikein/{bam_name}.bam",
+    params:
+        view_mapq="" if config['samtools_mapq'] == "" else "-q {mapq}".format(mapq=config['samtools_mapq']),
+        view_keep="" if config['samtools_keep_flags'] == "" else "-f {flag}".format(flag=config['samtools_keep_flags']),
+        view_omit="" if config['samtools_omit_flags'] == "" else "-F {flag}".format(flag=config['samtools_omit_flags']),
+    benchmark:
+        "benchmarks/{align_dirname}_filt_spikein/{bam_name}.txt"
+    envmodules:
+        config['modules']['samtools']
+    threads: 8
+    resources:
+        mem_gb = 96,
+        log_prefix=lambda wildcards: "_".join(wildcards)
+    shell:
+        """
+        samtools view -@ {threads} -u --region-file {input.spikein_chroms} {params.view_mapq} {params.view_keep} {params.view_omit} {input.bam} | \
+        samtools collate -@ {threads} -O -u - | \
+        samtools fixmate -@ {threads} -u - - | \
+        samtools view -@ {threads} -f 2 -b -u - | tee {output.bam} | \
+        samtools sort -m 6G -@ {threads} -o {output.sorted_bam} -
+
+        samtools index -@ {threads} {output.sorted_bam}
+
+        """
