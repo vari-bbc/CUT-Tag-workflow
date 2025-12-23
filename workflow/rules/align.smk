@@ -30,6 +30,7 @@ rule bowtie2:
     output:
         sorted_bam=temp("analysis/bowtie2/{sample}.sorted.bam") if config['cleanup_big_files']['unfilt_coordsorted_bams'] else "analysis/bowtie2/{sample}.sorted.bam",
         outbai="analysis/bowtie2/{sample}.sorted.bam.bai",
+        samblaster="analysis/bowtie2/{sample}.samblaster.log"
     benchmark:
         "benchmarks/bowtie2/{sample}.txt"
     params:
@@ -46,7 +47,7 @@ rule bowtie2:
         """
         bowtie2 -p {threads} --very-sensitive-local --soft-clipped-unmapped-tlen --no-mixed --no-discordant --dovetail --phred33 \
         -I 10 -X 1000 -x {params.bt2_index} -1 {input.R1_trimmed} -2 {input.R2_trimmed} | \
-        samblaster | \
+        samblaster 2> {output.samblaster} | \
         samtools sort -m 6G -O "bam" -@ {threads} -o {output.sorted_bam} -
         
         samtools index -@ {threads} {output.sorted_bam}
