@@ -18,11 +18,11 @@ bt2_index = config['ref']['index']
 samplesheet="bin/samples.tsv"
 units = pd.read_table(samplesheet, dtype={"sample" : str, "sample_group" : str })
 
-validate(units, "schema/samplesheet.yaml")
+validate(units, "../schema/samplesheet.yaml")
 
 contrasts_file="bin/contrasts.tsv"
 contrasts = pd.read_table(contrasts_file, dtype={"group1" : str, "group2" : str , "enriched_factor" : str})
-validate(contrasts, "schema/contrasts.yaml")
+validate(contrasts, "../schema/contrasts.yaml")
 
 samples = units[["sample","control","sample_group","enriched_factor"]].drop_duplicates()
 if not samples['sample'].is_unique:
