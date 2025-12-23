@@ -120,15 +120,15 @@ rule filter_bams:
         bam = "analysis/{align_dirname}/{bam_name}.sorted.bam",
         keep_regions = "analysis/misc/keep_regions.bed"
     output:
-        sorted_bam=temp("analysis/{align_dirname}_filt/{bam_name}.sorted.bam") if config['cleanup_big_files']['filt_coordsorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
-        sorted_bai="analysis/{align_dirname}_filt/{bam_name}.sorted.bam.bai",
-        bam=temp("analysis/{align_dirname}_filt/{bam_name}.bam") if config['cleanup_big_files']['filt_namecollated_bams'] else "analysis/{align_dirname}_filt/{bam_name}.bam",
+        sorted_bam=temp("analysis/{align_dirname}_filt_endogenous/{bam_name}.sorted.bam") if config['cleanup_big_files']['filt_coordsorted_bams'] else "analysis/{align_dirname}_filt/{bam_name}.sorted.bam",
+        sorted_bai="analysis/{align_dirname}_filt_endogenous/{bam_name}.sorted.bam.bai",
+        bam=temp("analysis/{align_dirname}_filt_endogenous/{bam_name}.bam") if config['cleanup_big_files']['filt_namecollated_bams'] else "analysis/{align_dirname}_filt/{bam_name}.bam",
     params:
         view_mapq="" if config['samtools_mapq'] == "" else "-q {mapq}".format(mapq=config['samtools_mapq']),
         view_keep="" if config['samtools_keep_flags'] == "" else "-f {flag}".format(flag=config['samtools_keep_flags']),
         view_omit="" if config['samtools_omit_flags'] == "" else "-F {flag}".format(flag=config['samtools_omit_flags']),
     benchmark:
-        "benchmarks/{align_dirname}_filt/{bam_name}.txt"
+        "benchmarks/{align_dirname}_filt_endogenous/{bam_name}.txt"
     envmodules:
         config['modules']['samtools']
     threads: 8

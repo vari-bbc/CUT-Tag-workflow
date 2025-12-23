@@ -3,7 +3,7 @@ rule convert_bam:
     Assumes non-discordant alignments as it outputs a BED file that represents the alignment of the fragment not the individual reads.
     """
     input:
-        bam="analysis/bowtie2_filt/{sample}.bam"
+        bam="analysis/bowtie2_filt_endogenous/{sample}.bam"
     output:
         sorted_bed=temp("analysis/bed_files/{sample}.bed"),
         gzip_bed="analysis/bed_files/{sample}.bed.gz"

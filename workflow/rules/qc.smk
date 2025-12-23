@@ -247,11 +247,11 @@ rule multiqc:
             expand("analysis/fastq_screen/{sample.sample}_R1_screen.html", sample=samples.itertuples()) +
             expand("analysis/fastq_screen/{sample.sample}_R2_screen.html", sample=samples.itertuples()) +
             expand("analysis/trim_galore/{sample.sample}_R{read}_val_{read}_fastqc.html", sample=samples.itertuples(), read=["1","2"]) +
-            expand("analysis/{align_dir}/idxstats/{sample.sample}.idxstats", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
-            expand("analysis/{align_dir}/flagstat/{sample.sample}.flagstat", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
-            expand("analysis/{align_dir}/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
-            expand("analysis/{align_dir}/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
-            expand("analysis/{align_dir}/qualimap/{sample.sample}/done", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt']) +
+            expand("analysis/{align_dir}/idxstats/{sample.sample}.idxstats", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt_endogenous']) +
+            expand("analysis/{align_dir}/flagstat/{sample.sample}.flagstat", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt_endogenous']) +
+            expand("analysis/{align_dir}/CollectAlignmentSummaryMetrics/{sample.sample}.aln_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt_endogenous']) +
+            expand("analysis/{align_dir}/CollectInsertSizeMetrics/{sample.sample}.insert_size_metrics.txt", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt_endogenous']) +
+            expand("analysis/{align_dir}/qualimap/{sample.sample}/done", sample=samples.itertuples(), align_dir=['bowtie2','bowtie2_filt_endogenous']) +
             expand("analysis/macs3_narrow/{sample.sample}_peaks.xls", sample=samples.itertuples()) +
             expand("analysis/frags_over_peaks/{peak_type}_frip.csv", peak_type = ['all','group'])
     output:

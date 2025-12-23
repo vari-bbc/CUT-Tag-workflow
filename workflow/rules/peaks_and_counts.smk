@@ -56,12 +56,12 @@ rule deeptools_heatmap_peaks:
         """
 
 def get_macs3_bams(wildcards):
-    macs3_bams = { 'trt': "analysis/bowtie2_filt/{sample}.sorted.bam".format(sample=wildcards.sample) }
+    macs3_bams = { 'trt': "analysis/bowtie2_filt_endogenous/{sample}.sorted.bam".format(sample=wildcards.sample) }
     
     control = samples[samples['sample'] == wildcards.sample]['control'].values[0]
     
     if (not pd.isnull(control)):
-        macs3_bams['control'] = expand("analysis/bowtie2_filt/{sample}.sorted.bam", sample = control.split(','))
+        macs3_bams['control'] = expand("analysis/bowtie2_filt_endogenous/{sample}.sorted.bam", sample = control.split(','))
     
     return macs3_bams
 
@@ -239,7 +239,7 @@ rule frip:
 rule csaw_count:
     input:
         samplesheet=samplesheet,
-        bams = lambda wildcards: expand("analysis/bowtie2_filt/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
+        bams = lambda wildcards: expand("analysis/bowtie2_filt_endogenous/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
     output:
         binned="analysis/csaw_win{width}/csaw_count/{enriched_factor}/binned.rds",
         small_wins="analysis/csaw_win{width}/csaw_count/{enriched_factor}/small_wins.rds",
