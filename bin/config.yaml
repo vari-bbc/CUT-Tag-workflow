@@ -37,6 +37,7 @@ addtnl_bigwig_norms:
   - 'csaw_hiAbund'
   - 'csaw.bkgd_spikein'
   - 'csaw.hiAbund_spikein'
+  - 'spikeinReads'
 
 # Differential analysis
 csaw:

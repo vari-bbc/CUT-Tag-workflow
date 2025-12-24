@@ -78,6 +78,36 @@ rule concat_base_cov_scale_factors:
         done
         """
 
+
+rule spikein_simple_scale_factors:
+    """
+    Calculate scale factors from spikeins simply based on total reads aligned, a la https://www.protocols.io/view/cut-amp-tag-data-processing-and-analysis-tutorial-e6nvw93x7gmk/v1.
+    """
+    input:
+        bam=lambda wildcards: expand("analysis/bowtie2_filt_spikein/{sample}.sorted.bam", sample=samples['sample']),
+    output:
+        "analysis/bigwig_norm_factors/spikein_simple_scale_factors.tsv"
+    benchmark:
+        "benchmarks/spikein_simple_scale_factors/bench.txt"
+    params:
+    threads: 8
+    resources:
+        mem_gb=120,
+        log_prefix="log"
+    envmodules:
+        config['modules']['samtools']
+    shell:
+        """
+        printf "sample\\tnum_frags\\tfinal.factors\\n" > {output}
+        for bam in {input.bam}
+        do
+            sample=`basename $bam | perl -npe 'chomp; die unless /(\.sorted\.bam)/; s/$1//'`
+            num_frags=`samtools view -@{threads} -c -f 64 $bam` # count first read only
+            scale_factor=`echo "10000 / $num_frags" | bc -l`
+            printf "$sample\\t$num_frags\\t$scale_factor\\n" >> {output}
+        done
+        """
+
 def get_scale_factor_file(wildcards):
     curr_enriched = ""
     if (wildcards.sample in samples_no_controls['sample'].values):
@@ -88,6 +118,8 @@ def get_scale_factor_file(wildcards):
         return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_hiAbund_endogenous.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "baseCov"):
         return "analysis/bigwig_norm_factors/base_cov_scale_factors.tsv"
+    elif (wildcards.scale_method == "spikeinReads"):
+        return "analysis/bigwig_norm_factors/spikein_simple_scale_factors.tsv"
     elif (wildcards.scale_method == "csaw.bkgd_spikein"):
         return "analysis/bigwig_norm_factors/{enriched_factor}_csaw_win{width}_bkgd_spikein.tsv".format(enriched_factor=curr_enriched, width=csaw_win_sizes[0])
     elif (wildcards.scale_method == "csaw.hiAbund_spikein"):
