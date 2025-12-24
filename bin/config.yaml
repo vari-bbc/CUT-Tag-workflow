@@ -53,7 +53,7 @@ chipseeker_params:
 
 # Delete big intermediate files
 cleanup_big_files:
-  unfilt_coordsorted_bams: False
+  unfilt_coordsorted_bams: True
   filt_namecollated_bams: True
   filt_coordsorted_bams: False
 
