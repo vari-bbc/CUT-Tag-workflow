@@ -235,10 +235,16 @@ rule frip:
     script:
         "../../bin/scripts/calc_frip.R"
 
+def get_endog_counts_if_spikein (wildcards):
+    outs = {"samplesheet": samplesheet}
+    if (wildcards.chromatin_source == "spikein"):
+        outs["endog_counts"] = f"analysis/csaw_win{wildcards.width}/csaw_count_endogenous/{wildcards.enriched_factor}/binned.rds"
+    return outs
 
 rule csaw_count:
     input:
-        samplesheet=samplesheet,
+        #samplesheet=samplesheet,
+        unpack(get_endog_counts_if_spikein),
         bams = lambda wildcards: expand("analysis/bowtie2_filt_{{chromatin_source}}/{sample}.sorted.bam", sample=samples_no_controls[samples_no_controls['enriched_factor'] == wildcards.enriched_factor]['sample']),
     output:
         binned="analysis/csaw_win{width}/csaw_count_{chromatin_source}/{enriched_factor}/binned.rds",

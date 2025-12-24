@@ -22,6 +22,12 @@ bam.files <- snakemake@input[["bams"]]
 
 names(bam.files) <- snakemake@params[["samp_names"]] 
 
+# endogenous counts if counting spikein reads
+# see https://support.bioconductor.org/p/114638/
+if (snakemake@wildcards[["chromatin_source"]] == "spikein"){
+    endog_counts <- snakemake@input[["endog_counts"]]
+}
+
 # output RDS objects
 binned_rds <- snakemake@output[['binned']]
 small_wins_rds <- snakemake@output[['small_wins']]
@@ -70,9 +76,20 @@ param
 # TMM on binned counts
 
 binned <- windowCounts(bam.files, bin=TRUE, width=bkgd_bin_width, param=param, BPPARAM=MulticoreParam(bp_cores)) # note that windows with less than 'filter' number of reads summed across libraries are removed
+message(str_glue("Samples are: {paste(colnames(binned), collapse = ', ')}."))
 
 message("For TMM on background bins, ", length(binned), " bins were used.")
+
 colData(binned) <- cbind(colData(binned), DataFrame(meta[match(colnames(binned), meta$sample), ]))
+
+endog_counts <- NULL
+if (snakemake@wildcards[["chromatin_source"]] == "spikein"){
+    endog_counts <- readRDS(snakemake@input[["endog_counts"]])
+    stopifnot(identical(colnames(binned), colnames(endog_counts)))
+    message(str_glue("Original spikein totals were: {paste(binned$totals, collapse = ', ')}."))
+    binned$totals <- endog_counts$totals
+    message(str_glue("Spikein totals updated to endogenous count totals: {paste(binned$totals, collapse = ', ')}."))
+}
 
 binned <- normFactors(binned, se.out=TRUE)
 saveRDS(binned, binned_rds) 
@@ -103,7 +120,17 @@ system(str_glue("ln -sr {outCompNorm} {outCompNormLink}"))
 # TMM on high abundance regions
 
 small_wins <- windowCounts(bam.files, width=hi_abund_win_width, param=param, BPPARAM=MulticoreParam(bp_cores)) # note that windows with less than 'filter' number of reads summed across libraries are removed
+message(str_glue("Samples are: {paste(colnames(small_wins), collapse = ', ')}."))
 colData(small_wins) <- cbind(colData(small_wins), DataFrame(meta[match(colnames(small_wins), meta$sample), ]))
+
+if (snakemake@wildcards[["chromatin_source"]] == "spikein"){
+    stopifnot(identical(colnames(small_wins), colnames(endog_counts)))
+
+    message(str_glue("Original spikein totals were: {paste(small_wins$totals, collapse = ', ')}."))
+    small_wins$totals <- endog_counts$totals
+    message(str_glue("Spikein totals updated to endogenous count totals: {paste(small_wins$totals, collapse = ', ')}."))
+}
+
 saveRDS(small_wins, small_wins_rds) # for faster debugging
 
 filter_wins <- filterWindowsGlobal(small_wins, binned)
